@@ -1,0 +1,6 @@
+GPinv.egg-info
+
+.coverage
+/coverage.xml
+
+codeship_settings.txt

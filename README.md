@@ -1,6 +1,6 @@
 # GPinv
 [![Build status](https://codeship.com/projects/8e8c5940-5322-0134-e799-4668b3c53a58/status?branch=master)](https://codeship.com/projects/147609)
-[![Coverage status](https://codecov.io/gh/fujii-team/GPinverse/branch/master/graph/badge.svg)](https://codecov.io/gh/fujii-team/GPinverse)
+[![Coverage status](https://codecov.io/gh/fujii-team/GPinv/branch/master/graph/badge.svg)](https://codecov.io/gh/fujii-team/GPinv)
 
 An inverse problem solver with Gaussian Process prior.
 
@@ -19,16 +19,16 @@ some transform of the latent function **f**.
 We assume **f** follows *Gaussian Process*.
 
 ## Supported models
-Currently, only linear model with
-<img src=doc/readme_imgs/linear_model.png>  where A is a given matrix.
+Currently, only the linear model with
+<img src=doc/readme_imgs/linear_model.png>  where A is a given matrix,
 is supported.
 
-In the future, GPinverse may support
+In the future, GPinv may support
 non-linear models.
 
 
 ## Dependencies
-**GPinv** is heavily depends on
+**GPinv** heavily depends on
 [**GPflow**](https://github.com/GPflow/GPflow)
 and [**TensorFlow**](https://www.tensorflow.org/).
 

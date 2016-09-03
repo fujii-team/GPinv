@@ -1,1 +1,1 @@
-from . import linear_model
+from . import linear_model, kernels

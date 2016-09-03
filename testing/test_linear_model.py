@@ -3,7 +3,6 @@ import GPinv
 import numpy as np
 import unittest
 import tensorflow as tf
-import GPflow
 
 def make_LosMatrix(r,z):
     """
@@ -70,7 +69,7 @@ class Test_linear_model(unittest.TestCase):
         # noise amplitude on the observation
         e = 0.1
         # synthetic latent function
-        f = np.exp(-(r-0.5)*(r-0.5)/4.) + np.exp(-(r+0.5)*(r+0.5)/4.)
+        f = np.exp(-(r-0.5)*(r-0.5)/0.1) + np.exp(-(r+0.5)*(r+0.5)/0.1)
         # constructing LOS-matrix
         A = make_LosMatrix(r,z)
         # synthetic signals
@@ -78,10 +77,13 @@ class Test_linear_model(unittest.TestCase):
 
         linear_model = GPinv.linear_model.LinearModel(X=r.reshape(-1,1),
                             Y=y.reshape(-1,1), Amat=A,
-                            kern=GPflow.kernels.RBF(1))
-
+                            kern=GPinv.kernels.RBF(1))
         linear_model.optimize(disp=False)
-        print(linear_model)
+        # predict
+        Xnew = np.linspace(0,1.,n-1).reshape(-1,1)
+        # just check the variance value
+        self.assertTrue(np.allclose(linear_model.likelihood.variance.value,
+                                    e*e, rtol=0.1))
 
 if __name__ == '__main__':
     unittest.main()

@@ -33,7 +33,7 @@ class RBF(GPflow.kernels.RBF):
     """  Identical to GPflow.kernels.RBF    """
     pass
 
-class RBF_csym(GPflow.kernels.Stationary):
+class RBF_csym(RBF):
     """
     RBF kernel with a cylindrically symmetric assumption.
 

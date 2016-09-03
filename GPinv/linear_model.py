@@ -1,9 +1,8 @@
 import numpy as np
 import tensorflow as tf
-import GPflow.model.GPModel as GPModel
-import GPflow.param.DataHolder as DataHolder
+import GPflow
 
-class LinearModel(GPflow.GPModel):
+class LinearModel(GPflow.model.GPModel):
     """
     Model for solving a linear inverse problem,
     where the data Y is a noisy observation of a linear transform of the latent
@@ -11,7 +10,8 @@ class LinearModel(GPflow.GPModel):
 
     Y = A F + e
     """
-    def __init__(X, Y, Amat, kern, mean_function=GPflow.mean_functions.Zero()):
+    def __init__(self, X, Y, Amat, kern,
+                                    mean_function=GPflow.mean_functions.Zero()):
         """
         :param 2d-np.array X: expressive data with shape [n, m]
         :param 2d-np.array Y: observation data with shape [N, m]
@@ -20,8 +20,10 @@ class LinearModel(GPflow.GPModel):
         :param GPflow.kernels.Kern kern: GPflow's kernel object.
         :param GPflow.kernels.MeanFunction mean_function: GPflow's mean_function object.
         """
-        GPModel.__init__(self, X, Y, kern, mean_function)
-        self.Amat = DataHolder(A)
+        GPflow.model.GPModel.__init__(self, X, Y, kern,
+                    likelihood=GPflow.likelihoods.Gaussian(),
+                    mean_function=mean_function)
+        self.Amat = GPflow.param.DataHolder(Amat)
 
 
     def build_likelihood(self):
@@ -31,13 +33,20 @@ class LinearModel(GPflow.GPModel):
 
         Similar to GPflow.gpr.GPR.
         """
-        # K = A^T K A + e
+        I = GPflow.tf_hacks.eye(tf.shape(self.Y)[0])
+        # K = A K A^T + e * I
         K = tf.matmul(
-                tf.matmul(self.A, self.kern.K(self.X), transpose_a = True),
-              self.A) \
-            + self.likelihood.variance
+                tf.matmul(self.Amat, self.kern.K(self.X)),
+              self.Amat, transpose_b = True) \
+            + self.likelihood.variance * I
 
         L = tf.cholesky(K)
         # m = A m_F
-        m = self.matmul(A, self.mean_function(self.X))
-        return multivariate_normal(self.Y, m, L)
+        m = tf.matmul(self.Amat, self.mean_function(self.X))
+        return GPflow.densities.multivariate_normal(self.Y, m, L)
+
+    def build_predict(self):
+        """
+
+        """
+        pass

@@ -1,6 +1,6 @@
 # GPinv
-[![travisCI](https://travis-ci.org/fujii-team/GPinverse.svg?branch=master)](https://travis-ci.org/)
-[![codecov](https://codecov.io/gh/fujii-team/GPinverse/branch/master/graph/badge.svg)](https://codecov.io/gh/fujii-team/GPinverse)
+[![Build status](https://codeship.com/projects/8e8c5940-5322-0134-e799-4668b3c53a58/status?branch=master)](https://codeship.com/projects/147609)
+[![Coverage status](https://codecov.io/gh/fujii-team/GPinverse/branch/master/graph/badge.svg)](https://codecov.io/gh/fujii-team/GPinverse)
 
 An inverse problem solver with Gaussian Process prior.
 

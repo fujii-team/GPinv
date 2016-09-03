@@ -1,10 +1,13 @@
 import numpy as np
 import tensorflow as tf
+from GPflow.model import GPModel
 from GPflow.tf_hacks import eye
-import GPflow
-from GPflow.param import AutoFlow
+from GPflow.likelihoods import Gaussian
+from GPflow.param import AutoFlow, DataHolder
+from GPflow.mean_functions import Zero
+from GPflow import densities
 
-class LinearModel(GPflow.model.GPModel):
+class LinearModel(GPModel):
     """
     Model for solving a linear inverse problem,
     where the data Y is a noisy observation of a linear transform of the latent
@@ -13,7 +16,7 @@ class LinearModel(GPflow.model.GPModel):
     Y = A F + e
     """
     def __init__(self, X, Y, Amat, kern,
-                                    mean_function=GPflow.mean_functions.Zero()):
+                                    mean_function=Zero()):
         """
         :param 2d-np.array X: expressive data with shape [n, m]
         :param 2d-np.array Y: observation data with shape [N, m]
@@ -22,12 +25,12 @@ class LinearModel(GPflow.model.GPModel):
         :param GPflow.kernels.Kern kern: GPflow's kernel object.
         :param GPflow.kernels.MeanFunction mean_function: GPflow's mean_function object.
         """
-        GPflow.model.GPModel.__init__(self, X, Y, kern,
-                    likelihood=GPflow.likelihoods.Gaussian(),
+        GPModel.__init__(self, X, Y, kern,
+                    likelihood=Gaussian(),
                     mean_function=mean_function)
 
         self.num_latent = Y.shape[1]
-        self.Amat = GPflow.param.DataHolder(Amat)
+        self.Amat = DataHolder(Amat)
 
 
     def build_likelihood(self):
@@ -46,7 +49,7 @@ class LinearModel(GPflow.model.GPModel):
         L = tf.cholesky(K)
         # m = A m_F
         m = tf.matmul(self.Amat, self.mean_function(self.X))
-        return GPflow.densities.multivariate_normal(self.Y, m, L)
+        return densities.multivariate_normal(self.Y, m, L)
 
 
     def build_predict(self, Xnew, full_cov=False):

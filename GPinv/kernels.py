@@ -1,3 +1,4 @@
+import tensorflow as tf
 import GPflow
 
 class Zero(GPflow.kernels.Kern):
@@ -5,7 +6,7 @@ class Zero(GPflow.kernels.Kern):
     Zero kernel that simply returns the zero matrix with appropriate size
     """
     def __init__(self, input_dim, active_dims=None):
-        Kern.__init__(self, input_dim, active_dims)
+        GPflow.kernels.Kern.__init__(self, input_dim, active_dims)
 
     def K(self, X, X2=None):
         if X2 is None:
@@ -32,18 +33,25 @@ class RBF(GPflow.kernels.RBF):
     """  Identical to GPflow.kernels.RBF    """
     pass
 
-class RBF_csym(GPflow.kernels.Stationary):
+class RBF_csym(RBF):
     """
     RBF kernel with a cylindrically symmetric assumption.
+
+    The kernel value is
+
+    K(x,x') = a exp(-(x+x)^2/2l^2)+a exp(-(x-x)^2/2l^2))
     """
     def K(self, X, X2=None):
         if X2 is None:
             X2 = X
-        return RBF.K(self, X, X) + RBF.K(self, X, -X)
+        return RBF.K(self, X, X2) + RBF.K(self, X, -X2)
 
     def Kdiag(self, X):
-        # TODO
-        pass
+        # returns [N] tensor
+        X, _ = self._slice(X, None)
+        square_dist = tf.reduce_sum(tf.square((X+X)/self.lengthscales), 1)
+        return RBF.Kdiag(self, X) + \
+                self.variance * tf.exp(-0.5*square_dist)
 
 
 class Linear(GPflow.kernels.Linear):

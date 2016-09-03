@@ -82,6 +82,8 @@ class Test_linear_model(unittest.TestCase):
         # predict
         Xnew = np.linspace(0,1.,n-1).reshape(-1,1)
         # just check the variance value
+        linear_model.predict_f(Xnew)
+        linear_model.predict_y()
         self.assertTrue(np.allclose(linear_model.likelihood.variance.value,
                                     e*e, rtol=0.1))
 

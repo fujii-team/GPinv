@@ -122,6 +122,15 @@ class ref_block_diagonal_kernel(object):
                             var * np.exp(-0.5 * sq_dist)
         return K_mat
 
+    def Kdiag(self, X):
+        K_diag = np.zeros(X.shape[0])
+        for i in range(X.shape[0]):
+            ind = int(X[i, -1])
+            var = self.kern_list[ind].variance.value
+            K_diag[i] = var
+        return K_diag
+
+
 
 
 class test_block_diagonal_kernel(unittest.TestCase):
@@ -148,9 +157,11 @@ class test_block_diagonal_kernel(unittest.TestCase):
         with m.tf_mode():
             Kxx  = sess.run(m.kern.K(m.X), feed_dict = m.get_feed_dict())
             Kxx2 = sess.run(m.kern.K(m.X, m.X2), feed_dict = m.get_feed_dict())
+            Kdiag = sess.run(m.kern.Kdiag(m.X), feed_dict = m.get_feed_dict())
 
         self.assertTrue(np.allclose(Kxx, kern_ref.K(X, X)))
         self.assertTrue(np.allclose(Kxx2, kern_ref.K(X, X2)))
+        self.assertTrue(np.allclose(Kdiag, kern_ref.Kdiag(X)))
 
 if __name__ == '__main__':
     unittest.main()

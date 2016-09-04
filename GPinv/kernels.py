@@ -1,6 +1,6 @@
 import tensorflow as tf
 import GPflow
-from GPflow.param import ParamList
+from .param import ParamList
 
 class Zero(GPflow.kernels.Kern):
     """
@@ -137,7 +137,11 @@ class SwitchedKernel(GPflow.kernels.Kern):
         # split up X into chunks corresponding to the relevant likelihoods
         x_list = tf.dynamic_partition(X, ind, self.num_kernel)
         # apply the kernel to each section of the data
-        results = [k.Kdiag(x) for (x,k) in zip(x_list, self.kernel_list)]
+        results = [self.kernel_list[i][i].Kdiag(x_list[i]) for i in range(len(x_list))]
+        # partition for X2
+        partitions = tf.dynamic_partition(tf.range(0, tf.size(ind)), ind, self.num_kernel)
+        return tf.dynamic_stitch(partitions, results)
+
 
 class BlockDiagonalKernel(SwitchedKernel):
     def __init__(self, kernel_list):

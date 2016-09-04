@@ -1,1 +1,1 @@
-from . import linear_model, kernels
+from . import linear_model, nonlinear_model, kernels, likelihoods, mean_functions

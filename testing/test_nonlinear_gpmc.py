@@ -3,10 +3,9 @@ import GPinv
 import numpy as np
 import unittest
 import tensorflow as tf
-from make_LosMatrix import make_LosMatrix
+from make_LosMatrix import make_LosMatrix, AbelLikelihood
 
-
-class Test_linear_model(unittest.TestCase):
+class Test_gpmc(unittest.TestCase):
     def test(self):
         """
         Abel inversion for the synthetic data.
@@ -32,18 +31,17 @@ class Test_linear_model(unittest.TestCase):
         A = make_LosMatrix(r,z)
         # synthetic signals
         y = np.dot(A, f) + e*rng.randn(N)
+        # likelihood
+        likelihood = AbelLikelihood(A)
 
-        linear_model = GPinv.linear_model.LinearModel(X=r.reshape(-1,1),
-                            Y=y.reshape(-1,1), Amat=A,
-                            kern=GPinv.kernels.RBF(1))
-        linear_model.optimize(disp=False)
-        # predict
-        Xnew = np.linspace(0,1.,n-1).reshape(-1,1)
-        linear_model.predict_f(Xnew)
-        linear_model.predict_y()
-        # just check the variance value
-        self.assertTrue(np.allclose(linear_model.likelihood.variance.value,
-                                    e*e, rtol=0.1))
+        model = GPinv.nonlinear_model.NonlinearModel(
+            X=r.reshape(-1,1), Y=y.reshape(-1,1),
+            kern=GPinv.kernels.RBF(1),
+            mean_function=GPinv.mean_functions.Constant(np.ones(1)),
+            likelihood=likelihood, method='gpmc')
+
+        #model.optimize()
+        model.sample(num_samples=10, Lmax=20, epsilon=0.01, verbose=True)
 
 if __name__ == '__main__':
     unittest.main()

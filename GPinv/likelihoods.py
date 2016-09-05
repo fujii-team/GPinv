@@ -29,48 +29,37 @@ class StochasticLikelihood(Likelihood):
          Stochastic approximation of
          \integ{logp(Y|f) N(f|Fmu,LLt) df}
         """
-        # normal random vector with shape [M, N, num_stocastic_points]
+        # normal random vector with shape [M* num_stocastic_points, N]
         rndn = tf.random_normal(
-                    [tf.shape(L)[2], tf.shape(L)[0], self.num_stocastic_points],
+                    [tf.shape(L)[2]*self.num_stocastic_points, tf.shape(L)[0], 1],
                     dtype=tf.float64)
-        # Fampled point of F.
-        # X.shape = [N, M, num_stocastic_points]. Mean: Fmu, Cov: LLt
-        X = tf.tile(tf.expand_dims(Fmu,2), [1,1,self.num_stocastic_points]) + \
-            tf.transpose(
-                tf.batch_matmul(tf.transpose(L, [2,0,1]), rndn)
-                # shape=[M, N, num_stocastic_points]
-                , [1,0,2]) # shape [N,M,num_stocastic_points]
-        # expand Y into the shape [N', M', num_stocastic_points]
-        Y = tf.tile(tf.expand_dims(Y,2), [1, 1, self.num_stocastic_points])
-        # logp.shape = [N", M", num_stocastic_points]
-        batch_logp = self.batch_logp(X, Y)
-        # weight matrix. Uniform weight. shape [N, M, num_stocastic_points, 1]
-        weight = tf.ones([tf.shape(batch_logp)[0], self.num_stocastic_points,1],
-                        dtype=tf.float64) / self.num_stocastic_points
+        # L.shape [M*num_stocastic_points, N, N]
+        L = tf.tile(tf.transpose(L, [2,0,1]), [self.num_stocastic_points, 1,1])
+        # Sampled point of F.
+        # X.shape = [N, M * num_stocastic_points]. Mean: Fmu, Cov: LLt
+        X = tf.tile(Fmu, [1,self.num_stocastic_points]) + \
+            tf.transpose(tf.squeeze(tf.batch_matmul(L, rndn), [2]))
+        # expand Y into the shape [N', M' * num_stocastic_points]
+        Y = tf.tile(Y,[1, self.num_stocastic_points])
+        # logp.shape = [N", M" * num_stocastic_points]
+        logp = self.logp(X, Y)
+        # weight matrix. Uniform weight. shape [M" * num_stocastic_points, 1]
+        weight = tf.ones([tf.shape(logp)[1],1], dtype=tf.float64) \
+                            / self.num_stocastic_points
         # return total of all the values and devide by num_stocastic_points.
-        return tf.squeeze(tf.batch_matmul(batch_logp, weight))
+        return tf.squeeze(tf.matmul(logp, weight))
 
     def logp(self, X, Y):
         """
         logp(Y|X)
 
         :args
-         X: shape=[N,M]
-         Y: shape=[N',M]
+         X: shape=[N, M * num_stocastic_points]
+         Y: shape=[N',M * num_stocastic_points]
         :returns
-         logp(Y|X): shape=[N',M]
-        """
-        raise NotImplementedError
+         logp(Y|X): shape=[N',M * num_stocastic_points]
 
-    def batch_logp(self, X, Y):
-        """
-        logp(Y|X) for the batch calculation
-
-        :args
-         X: shape=[N,M,num_stocastic_points]
-         Y: shape=[N',M,num_stocastic_points]
-        :returns
-         logp(Y|X): shape=[N',M, num_stocastic_points]
+        where num_stocastic_points == 1 for GPMC.
         """
         raise NotImplementedError
 
@@ -86,8 +75,6 @@ class Gaussian(StochasticLikelihood):
 
     def logp(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
-    def batch_logp(self, F, Y):
-        return self.logp(F, Y)
 
     def stochastic_expectations(self, Fmu, L, Y):
         return StochasticLikelihood.stochastic_expectations(self, Fmu, L, Y)

@@ -25,7 +25,7 @@ is supported.
 
 Currently, GPinv only supports simple non-linear model by MCMC estimate.
 + Nonlinear model
-  - MCMC with a single latent function. [Notebook](notebooks/nonlinera_model_example.ipynb)
+  - MCMC with a single latent function. [Notebook](notebooks/nonlinear_model_example.ipynb)
 
 
 ## Dependencies

@@ -42,10 +42,10 @@ class Test_gpmc(unittest.TestCase):
             mean_function=GPinv.mean_functions.Constant(np.ones(1)),
             likelihood=likelihood)
 
-        samples = model.sample(num_samples=500, Lmax=20, epsilon=0.01, verbose=False)
+        samples = model.sample(num_samples=1000, Lmax=20, epsilon=0.01, verbose=False)
         # check the noise value
         noise = []
-        for s in samples[200:]:
+        for s in samples[500:]:
             model.set_state(s)
             noise.append(model.likelihood.variance.value)
         noise_avg = np.mean(noise)

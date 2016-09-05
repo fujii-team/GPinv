@@ -92,7 +92,7 @@ class Gaussian(StochasticLikelihood):
     def stochastic_expectations(self, Fmu, L, Y):
         return StochasticLikelihood.stochastic_expectations(self, Fmu, L, Y)
 
-
+'''
 class NonLinearLikelihood(StochasticLikelihood):
     """
     Likelihood for the nonlinear_model.
@@ -167,3 +167,4 @@ class NonLinearLikelihood(StochasticLikelihood):
             The shape should be the same to that of Ylist.
         """
         raise NotImplementedError
+'''

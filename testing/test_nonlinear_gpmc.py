@@ -33,15 +33,24 @@ class Test_gpmc(unittest.TestCase):
         y = np.dot(A, f) + e*rng.randn(N)
         # likelihood
         likelihood = AbelLikelihood(A)
+        kern=GPinv.kernels.RBF(1) + GPinv.kernels.White(1) # the additional jitter is necessary.
+        kern.white.variance = 1.0e-5
 
-        model = GPinv.nonlinear_model.NonlinearModel(
+        model = GPinv.nonlinear_model.GPMC(
             X=r.reshape(-1,1), Y=y.reshape(-1,1),
-            kern=GPinv.kernels.RBF(1),
+            kern=kern,
             mean_function=GPinv.mean_functions.Constant(np.ones(1)),
-            likelihood=likelihood, method='gpmc')
+            likelihood=likelihood)
 
-        #model.optimize()
-        model.sample(num_samples=10, Lmax=20, epsilon=0.01, verbose=True)
+        samples = model.sample(num_samples=300, Lmax=20, epsilon=0.01, verbose=False)
+        # check the noise value
+        noise = []
+        for s in samples[100:]:
+            model.set_state(s)
+            noise.append(model.likelihood.variance.value)
+        noise_avg = np.mean(noise)
+        print(noise_avg)
+        self.assertTrue(np.allclose(noise_avg, e*e, atol=0.01))
 
 if __name__ == '__main__':
     unittest.main()

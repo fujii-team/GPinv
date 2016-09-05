@@ -47,14 +47,14 @@ def make_LosMatrix(r,z):
     return A
 
 
-class AbelLikelihood(GPinv.likelihoods.NonLinearLikelihood):
+class AbelLikelihood(GPinv.likelihoods.StochasticLikelihood):
     def __init__(self, Amat, num_stocastic_points=20):
-        GPinv.likelihoods.NonLinearLikelihood.__init__(self, num_stocastic_points)
+        GPinv.likelihoods.StochasticLikelihood.__init__(self, num_stocastic_points)
 
         self.Amat = GPflow.param.DataHolder(Amat)
         self.variance = GPflow.param.Param(np.ones(1), GPflow.transforms.positive)
 
-    def log_prob(self, Xlist, Ylist):
+    def logp(self, X, Y):
         """
         The log_probability for this Abel's likelihood.
         This part should be implemented in the child class.
@@ -65,6 +65,6 @@ class AbelLikelihood(GPinv.likelihoods.NonLinearLikelihood):
         :return list of log of the likelihood with length P.
             The shape should be the same to that of Ylist.
         """
-        F = tf.matmul(self.Amat, Xlist[0])
-        Y = Ylist[0]
-        return [GPflow.densities.gaussian(Y, F, self.variance)]
+        F = tf.matmul(self.Amat, tf.exp(X))
+        Y = Y
+        return GPflow.densities.gaussian(Y, F, self.variance)

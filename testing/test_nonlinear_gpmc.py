@@ -3,10 +3,9 @@ import GPinv
 import numpy as np
 import unittest
 import tensorflow as tf
-from make_LosMatrix import make_LosMatrix
+from make_LosMatrix import make_LosMatrix, AbelLikelihood
 
-
-class Test_linear_model(unittest.TestCase):
+class Test_gpmc(unittest.TestCase):
     def test(self):
         """
         Abel inversion for the synthetic data.
@@ -32,18 +31,26 @@ class Test_linear_model(unittest.TestCase):
         A = make_LosMatrix(r,z)
         # synthetic signals
         y = np.dot(A, f) + e*rng.randn(N)
+        # likelihood
+        likelihood = AbelLikelihood(A)
+        kern=GPinv.kernels.RBF(1) + GPinv.kernels.White(1) # the additional jitter is necessary.
+        kern.white.variance = 1.0e-5
 
-        linear_model = GPinv.linear_model.LinearModel(X=r.reshape(-1,1),
-                            Y=y.reshape(-1,1), Amat=A,
-                            kern=GPinv.kernels.RBF(1))
-        linear_model.optimize(disp=False)
-        # predict
-        Xnew = np.linspace(0,1.,n-1).reshape(-1,1)
-        linear_model.predict_f(Xnew)
-        linear_model.predict_y()
-        # just check the variance value
-        self.assertTrue(np.allclose(linear_model.likelihood.variance.value,
-                                    e*e, rtol=0.1))
+        model = GPinv.nonlinear_model.GPMC(
+            X=r.reshape(-1,1), Y=y.reshape(-1,1),
+            kern=kern,
+            mean_function=GPinv.mean_functions.Constant(np.ones(1)),
+            likelihood=likelihood)
+
+        samples = model.sample(num_samples=1000, Lmax=20, epsilon=0.01, verbose=False)
+        # check the noise value
+        noise = []
+        for s in samples[500:]:
+            model.set_state(s)
+            noise.append(model.likelihood.variance.value)
+        noise_avg = np.mean(noise)
+        print(noise_avg)
+        self.assertTrue(np.allclose(noise_avg, e*e, rtol=0.2))
 
 if __name__ == '__main__':
     unittest.main()

@@ -19,12 +19,13 @@ some transform of the latent function **f**.
 We assume **f** follows *Gaussian Process*.
 
 ## Supported models
-Currently, only the linear model with
++ Linear model
 <img src=doc/readme_imgs/linear_model.png>  where A is a given matrix,
 is supported.
 
-In the future, GPinv may support
-non-linear models.
+Currently, GPinv only supports simple non-linear model by MCMC estimate.
++ Nonlinear model
+  - MCMC with a single latent function. [Notebook](notebooks/nonlinera_model_example.ipynb)
 
 
 ## Dependencies

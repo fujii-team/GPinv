@@ -45,8 +45,8 @@ class test_MultiDiagL(unittest.TestCase):
         shape = (N, N, 2)
         values = [np.exp(rng.randn(n1,2)), rng.randn(n2,2)]
         head_indices = [(0,0), (1,0)]
-        transforms = [transforms.positive, transforms.Identity()]
-        multiDiagL = MultiDiagL(head_indices, values, transforms, shape)
+        trans = [transforms.positive, transforms.Identity()]
+        multiDiagL = MultiDiagL(head_indices, values, trans, shape)
 
         sess = tf.Session()
         sess.run(tf.initialize_all_variables())

@@ -43,12 +43,12 @@ class StochasticLikelihood(Likelihood):
         # expand Y into the shape [N', M', num_stocastic_points]
         Y = tf.tile(tf.expand_dims(Y,2), [1, 1, self.num_stocastic_points])
         # logp.shape = [N", M", num_stocastic_points]
-        batchlogp = self.batch_logp(X, Y)
+        batch_logp = self.batch_logp(X, Y)
         # weight matrix. Uniform weight. shape [N, M, num_stocastic_points, 1]
-        weight = tf.ones([tf.shape(logp)[0], self.num_stocastic_points,1],
+        weight = tf.ones([tf.shape(batch_logp)[0], self.num_stocastic_points,1],
                         dtype=tf.float64) / self.num_stocastic_points
         # return total of all the values and devide by num_stocastic_points.
-        return tf.squeeze(tf.batch_matmul(batcu_logp, weight))
+        return tf.squeeze(tf.batch_matmul(batch_logp, weight))
 
     def logp(self, X, Y):
         """
@@ -87,7 +87,7 @@ class Gaussian(StochasticLikelihood):
     def logp(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
     def batch_logp(self, F, Y):
-        return self.logp(self, F, Y)
+        return self.logp(F, Y)
 
     def stochastic_expectations(self, Fmu, L, Y):
         return StochasticLikelihood.stochastic_expectations(self, Fmu, L, Y)

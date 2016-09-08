@@ -7,61 +7,84 @@ from GPflow.likelihoods import Likelihood
 from GPflow import densities
 
 class StochasticLikelihood(Likelihood):
-    def __init__(self, num_stocastic_points=20):
+    def __init__(self, num_samples=20):
         """
         Likelihood with correlation.
-        :param 2-element-list shape: shape of variables passed to this likeilhood.
-        :param num_stocastic_points: number of random point to approximate the
+        :param num_samples: number of random point to approximate the
                                      variational expectation.
         """
         Likelihood.__init__(self)
         # number of random numbers to approximate the integration
-        self.num_stocastic_points = num_stocastic_points
+        self.num_samples = num_samples
 
     def stochastic_expectations(self, Fmu, L, Y):
         """
         Evaluate variational expectation based on the stochastic method.
+        We assume the likelihood is independent to some transform of the latent
+        functions
+         \integ{logp(Y|f) N(f|Fmu,LLt) df}
+         = logp(Y|g(f))
+         = \sum_{i} \integ{log(Y_i, g_i)p(g_i)g_i}
+
+        We approximate p(g_i) by a Gaussian function, whose mean and variance
+        is estimated from the stochastic method.
+
         :args
-         Fmu: Mean of the expectation. shape=[N,M]
+         Fmu: Mean of the latent function. shape=[N,M]
          L  : Cholesky of covariance. shape=[N,N,M]
          Y  : Data. shape=[N',M']
+
         :return
          Stochastic approximation of
          \integ{logp(Y|f) N(f|Fmu,LLt) df}
         """
-        # normal random vector with shape [M* num_stocastic_points, N]
+        # normal random vector with shape [num_samples, M, N, 1]
         rndn = tf.random_normal(
-                    [tf.shape(L)[2]*self.num_stocastic_points, tf.shape(L)[1], 1],
+                    [self.num_samples, tf.shape(L)[2], tf.shape(L)[1], 1],
                     dtype=tf.float64)
-        # L.shape [M*num_stocastic_points, N, N]
-        L = tf.tile(tf.transpose(L, [2,0,1]), [self.num_stocastic_points, 1,1])
+        # L.shape [num_samples, M, N, N]
+        L = tf.tile(tf.expand_dims(tf.transpose(L, [2,0,1]), [0]),
+                                    [self.num_samples, 1,1])
         # Sampled point of F.
-        # X.shape = [N, M * num_stocastic_points]. Mean: Fmu, Cov: LLt
-        X = tf.tile(Fmu, [1,self.num_stocastic_points]) + \
-            tf.transpose(tf.squeeze(tf.batch_matmul(L, rndn), [2]))
-        # expand Y into the shape [N', M' * num_stocastic_points]
-        Y = tf.tile(Y,[1, self.num_stocastic_points])
-        # logp.shape = [N", M" * num_stocastic_points]
-        logp = self.logp(X, Y)
-        # weight matrix. Uniform weight. shape [M" * num_stocastic_points, 1]
-        weight = tf.ones([tf.shape(logp)[1],1], dtype=tf.float64) \
-                            / self.num_stocastic_points
-        # return total of all the values and devide by num_stocastic_points.
-        return tf.squeeze(tf.matmul(logp, weight))
+        # X.shape = [num_samples, N, M]. Mean: Fmu, Cov: LLt
+        X = tf.tile(tf.expand_dims(Fmu, [0]), [self.num_samples, 1, 1]) + \
+            tf.stranspose(tf.squeeze(tf.batch_matmul(L, rndn), [3]), [0,2,1]) # [num_samples, N, M]
 
-    def logp(self, X, Y):
+        # The mean and variance of latent values for data point Y.
+        # Shape [num_samples', M, N']
+        G = self.transform(X)
+        # Estimate mean and variance. shape [N, M] for each.
+        Gmu, Gvar = self.estimate_mu_var(G)
+
+        return self.variational_expectations(Gmu, Gvar, Y)
+
+    def transform(self, F):
         """
-        logp(Y|X)
-
-        :args
-         X: shape=[N, M * num_stocastic_points]
-         Y: shape=[N',M * num_stocastic_points]
-        :returns
-         logp(Y|X): shape=[N',M * num_stocastic_points]
-
-        where num_stocastic_points == 1 for GPMC.
+        Transform of the latent functions.
+        :param tf.tensor F: Samples for latent functions sized [num_samples, M, N]
+        :return tf.tensor: Samples for the latent values at Y, sized
+                                                        [num_samples', M', N']
+        The return value should be real and vary around some values.
+        E.G. for the positive data, it should be projected into the real space
+        by Log function.
         """
         raise NotImplementedError
+
+    def logp(self, Gmu, Gvar, Y):
+        raise NotImplementedError
+
+    def estimate_mu_var(self,G):
+        """
+        :param tf.tensor G: Samples corresponding to the Y data point.
+                                sized [num_samples', N', M']
+        :return tf.tensor Gmu, Gvar: Mean and variance for the latent values.
+                                shape [N', M']
+        """
+        # shape [1, N', M']
+        Gmu = tf.reduce_mean(G, reduction_indices=[0])
+        # shape [N', M']
+        Gvar = tf.reduce_mean(tf.square(G-Gmu), reduction_indices=[0])
+        return Gmu, Gvar
 
 
 class Gaussian(StochasticLikelihood):
@@ -76,7 +99,10 @@ class Gaussian(StochasticLikelihood):
         """
         StochasticLikelihood.__init__(self, num_stocastic_points)
         self.variance = Param(1.0, transforms.positive)
-        self.exact = False
+        self.exact = exact
+
+    def transform(self, F):
+        return F
 
     def logp(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
@@ -91,6 +117,7 @@ class Gaussian(StochasticLikelihood):
                    - 0.5 * (tf.square(Y - Fmu) + Fvar) / self.variance
         else:
             return StochasticLikelihood.stochastic_expectations(self, Fmu, L, Y)
+
 
 class Poisson(StochasticLikelihood):
     def __init__(self, invlink=tf.exp, num_stocastic_points=20, exact=True):

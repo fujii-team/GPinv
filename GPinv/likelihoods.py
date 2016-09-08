@@ -31,7 +31,7 @@ class StochasticLikelihood(Likelihood):
         """
         # normal random vector with shape [M* num_stocastic_points, N]
         rndn = tf.random_normal(
-                    [tf.shape(L)[2]*self.num_stocastic_points, tf.shape(L)[0], 1],
+                    [tf.shape(L)[2]*self.num_stocastic_points, tf.shape(L)[1], 1],
                     dtype=tf.float64)
         # L.shape [M*num_stocastic_points, N, N]
         L = tf.tile(tf.transpose(L, [2,0,1]), [self.num_stocastic_points, 1,1])
@@ -69,16 +69,52 @@ class Gaussian(StochasticLikelihood):
     i.i.d Gaussian with uniform variance.
     Stochastic expectation is used.
     """
-    def __init__(self, num_stocastic_points=20):
+    def __init__(self, num_stocastic_points=20, exact=True):
+        """
+        :param bool exact: If True then analytically calculate
+                                            stochastic_expectations.
+        """
         StochasticLikelihood.__init__(self, num_stocastic_points)
         self.variance = Param(1.0, transforms.positive)
+        self.exact = False
 
     def logp(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
 
     def stochastic_expectations(self, Fmu, L, Y):
-        return StochasticLikelihood.stochastic_expectations(self, Fmu, L, Y)
+        if self.exact: # exact calculation
+            L = tf.transpose(L, [2,0,1])
+            Fvar = tf.batch_matrix_diag_part(tf.batch_matmul(L, L, adj_y=True))
+            Fmu = tf.transpose(Fmu)
+            Y = tf.transpose(Y)
+            return -0.5 * np.log(2 * np.pi) - 0.5 * tf.log(self.variance) \
+                   - 0.5 * (tf.square(Y - Fmu) + Fvar) / self.variance
+        else:
+            return StochasticLikelihood.stochastic_expectations(self, Fmu, L, Y)
 
+class Poisson(StochasticLikelihood):
+    def __init__(self, invlink=tf.exp, num_stocastic_points=20, exact=True):
+        """
+        exact flag is only applicable for tf.exp link
+        """
+        StochasticLikelihood.__init__(self, num_stocastic_points)
+        self.invlink = invlink
+        self.exact = exact
+
+    def logp(self, F, Y):
+        return densities.poisson(self.invlink(F), Y)
+
+    def stochastic_expectations(self, Fmu, L, Y):
+        if self.exact:
+            L = tf.transpose(L, [2,0,1])
+            Fvar = tf.batch_matrix_diag_part(tf.batch_matmul(L, L, adj_y=True))
+            Fmu = tf.transpose(Fmu)
+            Y = tf.transpose(Y)
+            return -0.5 * np.log(2 * np.pi) - 0.5 * tf.log(self.variance) \
+                   - 0.5 * (tf.square(Y - Fmu) + Fvar) / self.variance
+        else:
+            return StochasticLikelihood.stochastic_expectations(self,
+                                                        self.invlink(Fmu), L, Y)
 '''
 class NonLinearLikelihood(StochasticLikelihood):
     """

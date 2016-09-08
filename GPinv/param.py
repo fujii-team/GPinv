@@ -108,7 +108,6 @@ class MultiDiagL(Parameterized):
 
 class DenseL(Parameterized):
     """
-    # TODO
     Cholesky object for dense covariance matrix.
     """
     def __init__(self, diag_element, offdiag_element, shape):

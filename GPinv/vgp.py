@@ -50,7 +50,6 @@ class VGP(GPModel):
             semidiag_list[i]['length'] : length of each semi-diag part.
         """
         # assert that X and Y have the same length
-        assert(X.shape[0] == Y.shape[0])
         assert mode in ['mean_field', 'full_rank', 'semi_diag']
         if mode == 'semi_diag' and semidiag_list is None:
             raise('semidiag_list should be provided in semi_diag mode')
@@ -105,8 +104,8 @@ class VGP(GPModel):
         I = tf.tile(tf.expand_dims(eye(self.num_data), 0), [self.num_latent, 1, 1])
         # shape [num_latent, num_data, num_data]
         K = tf.tile(tf.expand_dims(K, 0), [self.num_latent, 1, 1])
-        # A = I + Llam^T K Llam
-        A = I + tf.batch_matmul(tf.batch_matmul(Llam, K, adj_x=True), Llam)
+        # A = I + Llam K Llam^T
+        A = I + tf.batch_matmul(tf.batch_matmul(Llam, K), Llam, adj_y=True)
         L = tf.batch_cholesky(A)
         Li = tf.batch_matrix_triangular_solve(L, I, lower=True)
 
@@ -120,8 +119,8 @@ class VGP(GPModel):
         # TODO Rank-two update should be applied to evaluate Lcov.
         Ai = tf.batch_matmul(Li, Li, adj_y=True) # A^-1
         # Here, 1.0e-9 * eye is added for stability.
-        Lcov_tmp = tf.batch_cholesky(I - Ai + I*1.0e-9) # (I - A^-1)
-        Lcov = tf.batch_matmul(Llam_inv, Lcov_tmp, adj_x=True)
+        Lcov_tmp = tf.batch_cholesky(I - Ai + I*1.0e-12) # (I - A^-1)^(1/2)
+        Lcov = tf.batch_matmul(Llam_inv, Lcov_tmp)
 
         # Lcov.shape = [num_data, num_data, num_latent]
         v_exp = self.likelihood.stochastic_expectations(
@@ -151,7 +150,7 @@ class VGP(GPModel):
         I = tf.tile(tf.expand_dims(eye(self.num_data), 0), [self.num_latent, 1, 1])
         K = tf.tile(tf.expand_dims(K, 0), [self.num_latent, 1, 1])
         # A = I + Llam^T K Llam
-        A = K + tf.batch_matmul(Llam_inv, Llam_inv, adj_x=True)
+        A = K + tf.batch_matmul(Llam_inv, Llam_inv, adj_y=True)
         L = tf.batch_cholesky(A)
         # shape [num_latent, num_data, N']
         Kx_tiled = tf.tile(tf.expand_dims(Kx, 0), [self.num_latent, 1, 1])

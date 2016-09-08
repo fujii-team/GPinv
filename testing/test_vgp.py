@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np
 import unittest
 from GPinv.vgp import VGP
-from GPinv.likelihoods import Gaussian
+from GPinv.likelihoods import Gaussian, Gaussian_exact
 
 class test_vgp(unittest.TestCase):
     def test_single(self):
@@ -16,8 +16,7 @@ class test_vgp(unittest.TestCase):
         rng = np.random.RandomState(0)
         num_params = 40
         X = np.linspace(0.0, 3.0, num_params).reshape(-1,1)
-        Y = 1.*np.cos(X) + rng.randn(num_params).reshape(-1,1) * 0.3
-
+        Y = 2.*np.cos(X) + rng.randn(num_params).reshape(-1,1) * 0.3
         # reference GPR
         m_ref = GPflow.gpr.GPR(X, Y, kern = GPflow.kernels.RBF(1))
         m_ref.optimize(disp=False)
@@ -27,33 +26,50 @@ class test_vgp(unittest.TestCase):
         m_vgp.optimize(disp=False)
 
         # stochastic vgp with mean-field approximation (true for Gaussian likelihood)
+        m_vgp2 = VGP(X, Y, kern = GPflow.kernels.RBF(1),
+                    likelihood=Gaussian_exact(20), mode='mean_field')
+        #m_stvgp.optimize()
+        m_vgp2.optimize(disp=False)
+        print(m_vgp._objective(m_vgp.get_free_state())[0])
+        print(m_vgp2._objective(m_vgp2.get_free_state())[0])
+        print(m_vgp.kern)
+        print(m_vgp2.kern)
+
         m_stvgp = VGP(X, Y, kern = GPflow.kernels.RBF(1),
-                likelihood=Gaussian(40),
-                mode='mean_field')
-        m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.01), maxiter=500)
+                    likelihood=Gaussian(500), mode='mean_field')
+        m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.01), maxiter=1000)
+        print(m_stvgp._objective(m_stvgp.get_free_state())[0])
+        print(m_stvgp.kern)
+
+        m_stvgp.likelihood=Gaussian(80)
+        m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.05), maxiter=500)
+        print(m_stvgp._objective(m_stvgp.get_free_state())[0])
+        print(m_stvgp.kern)
 
         # stochastic vgp with mean-field approximation (true for Gaussian likelihood)
         m_stvgp2 = VGP(X, Y, kern = GPflow.kernels.RBF(1),
                 likelihood=Gaussian(40),
                 mode='semi_diag',
                 semidiag_list=[{'head_index':[20,0], 'length':5}])
-        m_stvgp2.optimize(tf.train.AdamOptimizer(learning_rate=0.01), maxiter=500)
-        '''
+        m_stvgp2.kern.lengthscales = m_ref.kern.lengthscales.value
+        m_stvgp2.kern.variance = m_ref.kern.variance.value
+        m_stvgp2.optimize(tf.train.AdamOptimizer(learning_rate=0.05), maxiter=2000)
+
         print(m_ref._objective(m_ref.get_free_state())[0])
-        print(m_vgp._objective(m_vgp.get_free_state())[0])
+        #print(m_vgp._objective(m_vgp.get_free_state())[0])
         print(m_stvgp._objective(m_stvgp.get_free_state())[0])
         print(m_stvgp2._objective(m_stvgp2.get_free_state())[0])
         print(m_ref.kern)
-        print(m_vgp.kern)
+        #print(m_vgp.kern)
         print(m_stvgp.kern)
         print(m_stvgp2.kern)
         print(m_ref.likelihood)
-        print(m_vgp.likelihood)
+        #print(m_vgp.likelihood)
         print(m_stvgp.likelihood)
         print(m_stvgp2.likelihood)
         #print(m_stvgp2.q_lambda.matrices[0])
         print(m_stvgp2.q_lambda.matrices[1])
-        '''
+
         # needs rough agreement.
         self.assertTrue(np.allclose(  m_ref._objective(m_ref.get_free_state())[0],
                                     m_stvgp._objective(m_stvgp.get_free_state())[0],
@@ -61,14 +77,14 @@ class test_vgp(unittest.TestCase):
         self.assertTrue(np.allclose(  m_ref._objective(m_ref.get_free_state())[0],
                                     m_stvgp2._objective(m_stvgp2.get_free_state())[0],
                                     rtol=0.2))
-        #self.assertTrue(np.allclose(  m_ref.kern.variance.value,
-        #                            m_stvgp.kern.variance.value, rtol=0.2))
-        #self.assertTrue(np.allclose(  m_ref.kern.variance.value,
-        #                            m_stvgp2.kern.variance.value, rtol=0.2))
-        #self.assertTrue(np.allclose(  m_ref.kern.lengthscales.value,
-        #                            m_stvgp.kern.lengthscales.value, rtol=0.2))
-        #self.assertTrue(np.allclose(  m_ref.kern.lengthscales.value,
-        #                            m_stvgp2.kern.lengthscales.value, rtol=0.2))
+        self.assertTrue(np.allclose(  m_ref.kern.variance.value,
+                                    m_stvgp.kern.variance.value, rtol=0.2))
+        self.assertTrue(np.allclose(  m_ref.kern.variance.value,
+                                    m_stvgp2.kern.variance.value, rtol=0.2))
+        self.assertTrue(np.allclose(  m_ref.kern.lengthscales.value,
+                                    m_stvgp.kern.lengthscales.value, rtol=0.2))
+        self.assertTrue(np.allclose(  m_ref.kern.lengthscales.value,
+                                    m_stvgp2.kern.lengthscales.value, rtol=0.2))
         self.assertTrue(np.allclose(  m_ref.likelihood.variance.value,
                                     m_stvgp.likelihood.variance.value, rtol=0.2))
         self.assertTrue(np.allclose(  m_ref.likelihood.variance.value,

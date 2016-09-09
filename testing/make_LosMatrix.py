@@ -50,8 +50,8 @@ def make_LosMatrix(r,z):
 import tensorflow as tf
 
 class AbelLikelihood(GPinv.likelihoods.TransformedLikelihood):
-    def __init__(self, Amat, num_stocastic_points=20):
-        GPinv.likelihoods.TransformedLikelihood.__init__(self, num_stocastic_points)
+    def __init__(self, Amat, num_samples=20):
+        GPinv.likelihoods.TransformedLikelihood.__init__(self, num_samples)
 
         self.Amat = GPinv.param.DataHolder(Amat)
         self.variance = GPinv.param.Param(np.ones(1), GPinv.transforms.positive)

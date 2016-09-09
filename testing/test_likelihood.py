@@ -34,6 +34,7 @@ class GaussianLikelihood_ref(object):
 
 class test_Gaussian(unittest.TestCase):
     def test(self):
+        tf.set_random_seed(0)
         """
         Stochastic expectation should approach to the exact value
         """

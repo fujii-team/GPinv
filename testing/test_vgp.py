@@ -54,6 +54,13 @@ class test_vgp(unittest.TestCase):
         self.assertTrue(np.allclose(  m_ref._objective(m_ref.get_free_state())[0],
                                     obj_stvgp,
                                     atol=2.))
+
+        m_stvgp2 = VGP(self.X, self.Y, kern = GPflow.kernels.RBF(1),
+                    likelihood=Gaussian(40, exact=False), mode='semi_diag',
+                    semidiag_list=[{'head_index':[2,1], 'length':4}]
+                    )
+        m_stvgp2.optimize(tf.train.AdamOptimizer(learning_rate=0.05), maxiter=500)
+
         # TODO
         # not sure why but the kernel hyperparameters are not well estimated
         #self.assertTrue(np.allclose(  m_ref.kern.variance.value,
@@ -66,9 +73,12 @@ class test_vgp(unittest.TestCase):
         Xnew = np.linspace(0.0, 6.0, 29).reshape(-1,1)
         f_ref =   m_ref.predict_f(Xnew)
         f_stvgp=m_stvgp.predict_f(Xnew)
+        f_stvgp2=m_stvgp2.predict_f(Xnew)
 
-        self.assertTrue(np.allclose(f_ref[0], f_stvgp[0], atol=0.1))
-        self.assertTrue(np.allclose(f_ref[1], f_stvgp[1], atol=0.1))
+        self.assertTrue(np.allclose(f_ref[0], f_stvgp[0], atol=0.2))
+        self.assertTrue(np.allclose(f_ref[1], f_stvgp[1], atol=0.2))
+        self.assertTrue(np.allclose(f_ref[0], f_stvgp2[0], atol=0.2))
+        self.assertTrue(np.allclose(f_ref[1], f_stvgp2[1], atol=0.2))
 
 
 

@@ -100,9 +100,7 @@ class test_Gaussian(unittest.TestCase):
         res2= np.mean(expectation2 - expectation_exact)
         res3= np.mean(expectation3 - expectation_exact)
         res_diag= np.mean(expectation_diag - expectation_exact)
-        print(res, res2, res3, res_diag)
         # assert the residiual decreases by increasing sample number.
-        self.assertTrue(np.abs(res) > np.abs(res2))
         self.assertTrue(np.abs(res2)> np.abs(res3))
         # assert the approximation is close to the exact values.
         self.assertTrue(np.allclose(expectation3, expectation_exact,

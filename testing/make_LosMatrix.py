@@ -47,24 +47,26 @@ def make_LosMatrix(r,z):
     return A
 
 
-class AbelLikelihood(GPinv.likelihoods.StochasticLikelihood):
-    def __init__(self, Amat, num_stocastic_points=20):
-        GPinv.likelihoods.StochasticLikelihood.__init__(self, num_stocastic_points)
+import tensorflow as tf
 
-        self.Amat = GPflow.param.DataHolder(Amat)
-        self.variance = GPflow.param.Param(np.ones(1), GPflow.transforms.positive)
+class AbelLikelihood(GPinv.likelihoods.TransformedLikelihood):
+    def __init__(self, Amat, num_samples=20):
+        GPinv.likelihoods.TransformedLikelihood.__init__(self, num_samples)
+
+        self.Amat = GPinv.param.DataHolder(Amat)
+        self.variance = GPinv.param.Param(np.ones(1), GPinv.transforms.positive)
+
+    def transform(self, F):
+        Amat = tf.tile(tf.expand_dims(self.Amat, [0]), [tf.shape(F)[0], 1,1])
+        return tf.log(tf.batch_matmul(Amat, tf.exp(F)))
 
     def logp(self, X, Y):
         """
-        The log_probability for this Abel's likelihood.
-        This part should be implemented in the child class.
-        :param list of tensor Xlist: list of the latent functions with length Q.
+        :param list of tensor Xlist: tensor for the latent function.
                 The shape of the i-th element is [Ni,M]
-        :param list of tensor Ylist: list of the observations with length P.
-                The shape of the i-th element is [Ni',M']
+        :param list of tensor Ylist: tensor for the observation.
+                The shape of the i-th element is [Ni',M]
         :return list of log of the likelihood with length P.
             The shape should be the same to that of Ylist.
         """
-        F = tf.matmul(self.Amat, tf.exp(X))
-        Y = Y
-        return GPflow.densities.gaussian(Y, F, self.variance)
+        return GPinv.densities.gaussian(tf.exp(X), Y, self.variance)

@@ -2,7 +2,7 @@ import GPflow
 import tensorflow as tf
 import numpy as np
 import unittest
-from GPinv.vgp import VGP
+from GPinv.nonlinear_model import VGP
 from GPinv.likelihoods import Gaussian
 
 class test_vgp(unittest.TestCase):

@@ -2,6 +2,10 @@ import tensorflow as tf
 from GPflow import mean_functions
 from GPflow.param import ParamList
 
+class Zero(mean_functions.Zero):
+    """ Just a wrap """
+    pass
+
 class Constant(mean_functions.Constant):
     """ Just a wrap """
     pass

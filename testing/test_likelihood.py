@@ -51,10 +51,7 @@ class test_Gaussian(unittest.TestCase):
         L_diag = np.diag(np.sqrt(np.diag(np.dot(L, L.transpose()))))
 
         variance = 1.
-        ref = GaussianLikelihood_ref(variance=variance, num_stocastic_points=100)
-        ref2 = GaussianLikelihood_ref(variance=variance, num_stocastic_points=300)
-        ref3 = GaussianLikelihood_ref(variance=variance, num_stocastic_points=1000)
-        f = np.zeros(num_params)
+        f = rng.randn(num_params)
         y = np.zeros(num_params)
 
         m = GPflow.model.Model()
@@ -78,9 +75,6 @@ class test_Gaussian(unittest.TestCase):
         tf_array = m.get_free_state()
         m.make_tf_array(tf_array)
         with m.tf_mode():
-            expectation_ref = ref.stochastic_expectations(f, L, y)
-            expectation_ref2 = ref2.stochastic_expectations(f, L, y)
-            expectation_ref3 = ref3.stochastic_expectations(f, L, y)
             expectation = sess.run(
                     m.gaussian.stochastic_expectations(m.F, m.L, m.Y),
                         feed_dict = m.get_feed_dict())
@@ -97,24 +91,21 @@ class test_Gaussian(unittest.TestCase):
             expectation_exact = sess.run(
                     m.gaussian_exact.stochastic_expectations(m.F, m.L, m.Y),
                         feed_dict = m.get_feed_dict())
-        print(expectation_ref)
-        print(expectation)
-        print(expectation2)
-        print(expectation3)
-        res_ref = np.mean(expectation_ref - expectation_exact)
-        res_ref2 = np.mean(expectation_ref2 - expectation_exact)
-        res_ref3 = np.mean(expectation_ref3 - expectation_exact)
+        # print(expectation)
+        # print(expectation2)
+        # print(expectation3)
+        # print(expectation_exact)
         res = np.mean(expectation - expectation_exact)
         res2= np.mean(expectation2 - expectation_exact)
         res3= np.mean(expectation3 - expectation_exact)
         res_diag= np.mean(expectation_diag - expectation_exact)
-        print(res_ref, res_ref2, res_ref3, res, res2, res3, res_diag)
+        # print(res, res2, res3, res_diag)
         # assert the residiual decreases by increasing sample number.
         self.assertTrue(np.abs(res) > np.abs(res2))
         self.assertTrue(np.abs(res2)> np.abs(res3))
         # assert the approximation is close to the exact values.
-        self.assertTrue(np.allclose(np.sum(expectation), np.sum(expectation_exact),
-            rtol=1.0e-2))
+        self.assertTrue(np.allclose(expectation3, expectation_exact,
+            rtol=0.1))
 
 if __name__ == "__main__":
     unittest.main()

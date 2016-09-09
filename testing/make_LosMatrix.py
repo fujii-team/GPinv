@@ -47,12 +47,16 @@ def make_LosMatrix(r,z):
     return A
 
 
-class AbelLikelihood(GPinv.likelihoods.StochasticLikelihood):
-    def __init__(self, Amat, num_stocastic_points=20):
-        GPinv.likelihoods.StochasticLikelihood.__init__(self, num_stocastic_points)
+class AbelLikelihood(GPinv.likelihoods.TransformedLikelihood):
+    def __init__(self, Amat, num_samples=20):
+        GPinv.likelihoods.TransformedLikelihood.__init__(self, num_samples)
 
         self.Amat = GPflow.param.DataHolder(Amat)
         self.variance = GPflow.param.Param(np.ones(1), GPflow.transforms.positive)
+
+    def transform(self, G):
+        G = tf.expand_dims(G, [0,0])
+        return tf.batch_matmul(A, G)
 
     def logp(self, X, Y):
         """
@@ -65,6 +69,4 @@ class AbelLikelihood(GPinv.likelihoods.StochasticLikelihood):
         :return list of log of the likelihood with length P.
             The shape should be the same to that of Ylist.
         """
-        F = tf.matmul(self.Amat, tf.exp(X))
-        Y = Y
         return GPflow.densities.gaussian(Y, F, self.variance)

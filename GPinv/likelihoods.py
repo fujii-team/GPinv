@@ -6,7 +6,7 @@ from GPflow.param import Param, DataHolder
 from GPflow.likelihoods import Likelihood
 from GPflow import densities
 
-class StochasticLikelihood(Likelihood):
+class TransformedLikelihood(Likelihood):
     def __init__(self, num_samples=20):
         """
         Likelihood with correlation.
@@ -44,50 +44,60 @@ class StochasticLikelihood(Likelihood):
                     dtype=tf.float64)
         # L.shape [num_samples, M, N, N]
         L = tf.tile(tf.expand_dims(tf.transpose(L, [2,0,1]), [0]),
-                                    [self.num_samples, 1,1])
+                                    [self.num_samples, 1,1,1])
         # Sampled point of F.
         # X.shape = [num_samples, N, M]. Mean: Fmu, Cov: LLt
         X = tf.tile(tf.expand_dims(Fmu, [0]), [self.num_samples, 1, 1]) + \
-            tf.stranspose(tf.squeeze(tf.batch_matmul(L, rndn), [3]), [0,2,1]) # [num_samples, N, M]
-
+            tf.transpose(tf.squeeze(tf.batch_matmul(L, rndn), [3]), [0,2,1])
         # The mean and variance of latent values for data point Y.
-        # Shape [num_samples', M, N']
+        # Shape [num_samples', N', M']
         G = self.transform(X)
         # Estimate mean and variance. shape [N, M] for each.
-        Gmu, Gvar = self.estimate_mu_var(G)
+        Gmu = tf.reduce_mean(G, reduction_indices=[0], keep_dims=True)        # shape [1, N', M']
+        # shape [N', M']
+        Gvar = tf.reduce_mean(
+            tf.square(G-tf.tile(Gmu, [self.num_samples, 1, 1])),
+            reduction_indices=[0])
+        Gmu = tf.squeeze(Gmu,[0])
 
-        return self.variational_expectations(Gmu, Gvar, Y)
+        return self.variational_expectations(tf.transpose(Gmu), tf.transpose(Gvar), Y)
+
+    def logp_gpmc(self, X, Y):
+        """
+        A method that for the gpmc.
+        :param tf.tensor X: shape [N, M]
+        :param tf.tensor Y: shape [N',M']
+        """
+        # reshape to match self.transform input
+        X = tf.expand_dims(X, [0])
+        G = self.transform(X)
+        # reshape to match self.logp input
+        G = tf.squeeze(G, [0])
+        return self.logp(G, Y)
 
     def transform(self, F):
         """
-        Transform of the latent functions.
+        Transform of the latent functions to latent values.
         :param tf.tensor F: Samples for latent functions sized [num_samples, M, N]
         :return tf.tensor: Samples for the latent values at Y, sized
                                                         [num_samples', M', N']
         The return value should be real and vary around some values.
-        E.G. for the positive data, it should be projected into the real space
-        by Log function.
+        E.G. the latent values that is limited to positive space should be
+        projected into the entire real space by Log function.
         """
         raise NotImplementedError
 
-    def logp(self, Gmu, Gvar, Y):
+    def logp(self, F, Y):
+        """
+        Return p(Y|F)
+
+        :param tf.tensor Y: shape [N', M']
+        :param tf.tensor F: shape [N', M']
+        """
         raise NotImplementedError
 
-    def estimate_mu_var(self,G):
-        """
-        :param tf.tensor G: Samples corresponding to the Y data point.
-                                sized [num_samples', N', M']
-        :return tf.tensor Gmu, Gvar: Mean and variance for the latent values.
-                                shape [N', M']
-        """
-        # shape [1, N', M']
-        Gmu = tf.reduce_mean(G, reduction_indices=[0])
-        # shape [N', M']
-        Gvar = tf.reduce_mean(tf.square(G-Gmu), reduction_indices=[0])
-        return Gmu, Gvar
 
-
-class Gaussian(StochasticLikelihood):
+class Gaussian(TransformedLikelihood):
     """
     i.i.d Gaussian with uniform variance.
     Stochastic expectation is used.
@@ -97,7 +107,7 @@ class Gaussian(StochasticLikelihood):
         :param bool exact: If True then analytically calculate
                                             stochastic_expectations.
         """
-        StochasticLikelihood.__init__(self, num_stocastic_points)
+        TransformedLikelihood.__init__(self, num_stocastic_points)
         self.variance = Param(1.0, transforms.positive)
         self.exact = exact
 
@@ -116,15 +126,15 @@ class Gaussian(StochasticLikelihood):
             return -0.5 * np.log(2 * np.pi) - 0.5 * tf.log(self.variance) \
                    - 0.5 * (tf.square(Y - Fmu) + Fvar) / self.variance
         else:
-            return StochasticLikelihood.stochastic_expectations(self, Fmu, L, Y)
+            return TransformedLikelihood.stochastic_expectations(self, Fmu, L, Y)
 
 
-class Poisson(StochasticLikelihood):
+class Poisson(TransformedLikelihood):
     def __init__(self, invlink=tf.exp, num_stocastic_points=20, exact=True):
         """
         exact flag is only applicable for tf.exp link
         """
-        StochasticLikelihood.__init__(self, num_stocastic_points)
+        TransformedLikelihood.__init__(self, num_stocastic_points)
         self.invlink = invlink
         self.exact = exact
 

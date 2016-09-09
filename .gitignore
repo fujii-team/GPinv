@@ -64,4 +64,9 @@ target/
 
 # IPython Notebooks
 */.ipynb_checkpoints
+
+# Ipython just for testing
+archive_notebooks
+
+# memo for codeship setting
 codeship_settings.txt

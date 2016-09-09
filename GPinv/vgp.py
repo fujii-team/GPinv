@@ -5,9 +5,9 @@ from GPflow.model import GPModel
 from GPflow import transforms
 from GPflow.mean_functions import Zero
 from GPflow.tf_hacks import eye
-from param import DiagL, MultiDiagL
+from .param import DiagL, MultiDiagL
 
-class VGP(GPModel):
+class TransformedVGP(GPModel):
     """
     This is an extended version of the Variational Gaussian Process(VGP).
     The key reference is:

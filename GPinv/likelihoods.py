@@ -129,29 +129,6 @@ class Gaussian(TransformedLikelihood):
             return TransformedLikelihood.stochastic_expectations(self, Fmu, L, Y)
 
 
-class Poisson(TransformedLikelihood):
-    def __init__(self, invlink=tf.exp, num_stocastic_points=20, exact=True):
-        """
-        exact flag is only applicable for tf.exp link
-        """
-        TransformedLikelihood.__init__(self, num_stocastic_points)
-        self.invlink = invlink
-        self.exact = exact
-
-    def logp(self, F, Y):
-        return densities.poisson(self.invlink(F), Y)
-
-    def stochastic_expectations(self, Fmu, L, Y):
-        if self.exact:
-            L = tf.transpose(L, [2,0,1])
-            Fvar = tf.batch_matrix_diag_part(tf.batch_matmul(L, L, adj_y=True))
-            Fmu = tf.transpose(Fmu)
-            Y = tf.transpose(Y)
-            return -0.5 * np.log(2 * np.pi) - 0.5 * tf.log(self.variance) \
-                   - 0.5 * (tf.square(Y - Fmu) + Fvar) / self.variance
-        else:
-            return StochasticLikelihood.stochastic_expectations(self,
-                                                        self.invlink(Fmu), L, Y)
 '''
 class NonLinearLikelihood(StochasticLikelihood):
     """

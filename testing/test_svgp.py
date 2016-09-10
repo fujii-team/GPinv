@@ -17,7 +17,7 @@ class test_vgp(unittest.TestCase):
         m_ref = GPflow.gpr.GPR(self.X, self.Y, kern = GPflow.kernels.RBF(1))
         m_ref.optimize(disp=False)
 
-        minibatchGaussian = MinibatchGaussian(self.num_params, self.num_params, 40, exact=False)
+        minibatchGaussian = MinibatchGaussian(self.num_params, self.num_params, 40)
         m_stvgp = SVGP(self.X, self.Y,
                     kern = GPflow.kernels.RBF(1),
                     likelihood=minibatchGaussian,
@@ -34,6 +34,22 @@ class test_vgp(unittest.TestCase):
                                     obj_stvgp,
                                     atol=2.))
 
+        # with inducing point and minibatching
+        inducing = 5
+        minibatch_size = 20
+        minibatchGaussian2 = MinibatchGaussian(self.num_params, minibatch_size, 40)
+        m_stvgp2 = SVGP(self.X, self.Y,
+                    kern = GPflow.kernels.RBF(1),
+                    likelihood=minibatchGaussian2,
+                    Z = np.linspace(0.5,5.5,inducing).reshape(-1,1),
+                    minibatch_size=minibatch_size)
+
+        m_stvgp2.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=2000)
+        obj_stvgp2 = np.mean(
+                [m_stvgp2._objective(m_stvgp2.get_free_state())[0] for i in range(10)])
+        # needs rough agreement.
+        print(m_ref._objective(m_ref.get_free_state())[0])
+        print(obj_stvgp2)
         # TODO
         # not sure why but the kernel hyperparameters are not well estimated
         #self.assertTrue(np.allclose(  m_ref.kern.variance.value,
@@ -46,9 +62,12 @@ class test_vgp(unittest.TestCase):
         Xnew = np.linspace(0.0, 6.0, 29).reshape(-1,1)
         f_ref =   m_ref.predict_f(Xnew)
         f_stvgp=m_stvgp.predict_f(Xnew)
+        f_stvgp2=m_stvgp2.predict_f(Xnew)
 
         self.assertTrue(np.allclose(f_ref[0], f_stvgp[0], atol=0.2))
         self.assertTrue(np.allclose(f_ref[1], f_stvgp[1], atol=0.2))
+        self.assertTrue(np.allclose(f_ref[0], f_stvgp2[0], atol=0.2))
+        self.assertTrue(np.allclose(f_ref[1], f_stvgp2[1], atol=0.2))
 
 
 

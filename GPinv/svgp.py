@@ -75,7 +75,7 @@ class TransformedSVGP(SVGP):
         # Get conditionals
         fmean, fcov = self.build_predict(self.X, full_cov=True)
         # TODO Rank-two downgrade should be applied (if possible).
-        jitter = tf.tile(tf.expand_dims(eye(self.num_inducing), [0]),
+        jitter = tf.tile(tf.expand_dims(eye(tf.shape(self.X)[0]), [0]),
                         [self.num_latent, 1,1]) * 1.0e-6
         Lcov = tf.transpose(
                     tf.batch_cholesky(tf.transpose(fcov, [2,0,1]) + jitter), [1,2,0])

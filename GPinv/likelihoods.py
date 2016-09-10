@@ -5,10 +5,7 @@ from GPflow import transforms
 from GPflow.param import Param, DataHolder
 from GPflow.likelihoods import Likelihood
 from GPflow import densities
-from GPflow import svgp
-
-class MinibatchData(svgp.MinibatchData):
-    pass
+from .param import MinibatchData
 
 class TransformedLikelihood(Likelihood):
     def __init__(self, num_samples=20):
@@ -133,8 +130,8 @@ class Gaussian(TransformedLikelihood):
             return TransformedLikelihood.stochastic_expectations(self, Fmu, L, Y)
 
 class MinibatchGaussian(Gaussian):
-    def __init__(self, num_data, minibatch_size, num_samples=20, exact=True):
-        Gaussian.__init__(self, num_samples, exact)
+    def __init__(self, num_data, minibatch_size, num_samples=20):
+        Gaussian.__init__(self, num_samples, exact=False)
         # transfer function
         self.I = MinibatchData(np.eye(num_data), minibatch_size)
 

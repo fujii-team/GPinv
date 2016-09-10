@@ -2,7 +2,11 @@ from GPflow import param
 import tensorflow as tf
 from GPflow import transforms
 from GPflow.tf_wraps import eye
+from GPflow import svgp
 from functools import reduce
+
+class MinibatchData(svgp.MinibatchData):
+    pass
 
 class Param(param.Param):
     pass

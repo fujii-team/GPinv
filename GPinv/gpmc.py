@@ -1,7 +1,7 @@
 import tensorflow as tf
 from GPflow.gpmc import GPMC
 from GPflow.likelihoods import Likelihood
-from GPflow.tf_hacks import eye
+from GPflow.tf_wraps import eye
 from .mean_functions import Zero
 from .likelihoods import TransformedLikelihood
 

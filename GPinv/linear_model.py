@@ -1,7 +1,7 @@
 import numpy as np
 import tensorflow as tf
 from GPflow.model import GPModel
-from GPflow.tf_hacks import eye
+from GPflow.tf_wraps import eye
 from GPflow.likelihoods import Gaussian
 from GPflow.param import AutoFlow, DataHolder
 from GPflow.mean_functions import Zero

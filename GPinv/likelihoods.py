@@ -5,6 +5,10 @@ from GPflow import transforms
 from GPflow.param import Param, DataHolder
 from GPflow.likelihoods import Likelihood
 from GPflow import densities
+from GPflow import svgp
+
+class MinibatchData(svgp.MinibatchData):
+    pass
 
 class TransformedLikelihood(Likelihood):
     def __init__(self, num_samples=20):
@@ -102,12 +106,12 @@ class Gaussian(TransformedLikelihood):
     i.i.d Gaussian with uniform variance.
     Stochastic expectation is used.
     """
-    def __init__(self, num_stocastic_points=20, exact=True):
+    def __init__(self, num_samples=20, exact=True):
         """
         :param bool exact: If True then analytically calculate
                                             stochastic_expectations.
         """
-        TransformedLikelihood.__init__(self, num_stocastic_points)
+        TransformedLikelihood.__init__(self, num_samples)
         self.variance = Param(1.0, transforms.positive)
         self.exact = exact
 
@@ -128,6 +132,15 @@ class Gaussian(TransformedLikelihood):
         else:
             return TransformedLikelihood.stochastic_expectations(self, Fmu, L, Y)
 
+class MinibatchGaussian(Gaussian):
+    def __init__(self, num_data, minibatch_size, num_samples=20, exact=True):
+        Gaussian.__init__(self, num_samples, exact)
+        # transfer function
+        self.I = MinibatchData(np.eye(num_data), minibatch_size)
+
+    def transform(self, F):
+        I = tf.tile(tf.expand_dims(self.I, [0]), [tf.shape(F)[0], 1, 1])
+        return tf.batch_matmul(I, F)
 
 '''
 class NonLinearLikelihood(StochasticLikelihood):

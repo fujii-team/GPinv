@@ -16,8 +16,12 @@
 # limitations under the License.
 
 import tensorflow as tf
+import numpy as np
 from GPflow.svgp import SVGP, MinibatchData
-from .param import DataHolder
+from GPflow.model import GPModel
+from GPflow.tf_wraps import eye
+from .param import DataHolder, Param
+from .mean_functions import Zero
 
 class TransformedSVGP(SVGP):
     """
@@ -27,7 +31,7 @@ class TransformedSVGP(SVGP):
                  num_latent=None, q_diag=False, whiten=True, minibatch_size=None):
         """
         - X is a data matrix, size N x D
-        - Y is a data matrix, size N x R
+        - Y is a data matrix, size N' x R
         - kern, likelihood, mean_function are appropriate GPflow objects
         - Z is a matrix of pseudo inputs, size M x D
         - num_latent is the number of latent process to use, default to
@@ -42,7 +46,7 @@ class TransformedSVGP(SVGP):
             minibatch_size = X.shape[0]
         self.num_data = X.shape[0]
         X = DataHolder(X)
-        Y = MinibatchData(Y, minibatch_size, np.random.RandomState(0))
+        Y = MinibatchData(Y, minibatch_size)
 
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
@@ -71,10 +75,12 @@ class TransformedSVGP(SVGP):
         # Get conditionals
         fmean, fcov = self.build_predict(self.X, full_cov=True)
         # TODO Rank-two downgrade should be applied (if possible).
+        jitter = tf.tile(tf.expand_dims(eye(self.num_inducing), [0]),
+                        [self.num_latent, 1,1]) * 1.0e-6
         Lcov = tf.transpose(
-                    tf.batch_cholesky(tf.transpose(fcov, [2,0,1])), [1,2,0])
+                    tf.batch_cholesky(tf.transpose(fcov, [2,0,1]) + jitter), [1,2,0])
         # Get variational expectations.
-        var_exp = self.likelihood.Stochastic_expectations(fmean, Lcov, self.Y)
+        var_exp = self.likelihood.stochastic_expectations(fmean, Lcov, self.Y)
         # re-scale for minibatch size
         scale = tf.cast(self.num_data, tf.float64) / tf.cast(tf.shape(self.X)[0], tf.float64)
         return tf.reduce_sum(var_exp) * scale - KL

@@ -9,9 +9,9 @@ class GaussianLikelihood_ref(object):
     """
     Reference for the test
     """
-    def __init__(self, variance=1., num_stocastic_points=20):
+    def __init__(self, variance=1., num_samples=20):
         self.variance = variance
-        self.num_stocastic_points = num_stocastic_points
+        self.num_samples = num_samples
         self.rng = np.random.RandomState(0)
 
     def logp(self, y, f):
@@ -26,9 +26,9 @@ class GaussianLikelihood_ref(object):
         :return 1d-np.array: stochastic expectations for \int log(y|f)p(f)df
         """
         expectations = np.zeros(f.shape)
-        for i in range(self.num_stocastic_points):
+        for i in range(self.num_samples):
             f_sample = f+np.dot(L, self.rng.randn(L.shape[1]))
-            expectations += self.logp(f_sample, y) / self.num_stocastic_points
+            expectations += self.logp(f_sample, y) / self.num_samples
         return expectations
 
 
@@ -56,11 +56,11 @@ class test_Gaussian(unittest.TestCase):
         y = np.zeros(num_params)
 
         m = GPflow.model.Model()
-        m.gaussian = Gaussian(num_stocastic_points=100,exact=False)
+        m.gaussian = Gaussian(num_samples=100,exact=False)
         m.gaussian.variance = variance
-        m.gaussian2 = Gaussian(num_stocastic_points=300,exact=False)
+        m.gaussian2 = Gaussian(num_samples=300,exact=False)
         m.gaussian2.variance = variance
-        m.gaussian3 = Gaussian(num_stocastic_points=1000,exact=False)
+        m.gaussian3 = Gaussian(num_samples=1000,exact=False)
         m.gaussian3.variance = variance
         m.gaussian_exact = Gaussian(exact=True)
         m.gaussian_exact.variance = variance

@@ -1,7 +1,7 @@
 from GPflow import param
 import tensorflow as tf
 from GPflow import transforms
-from GPflow.tf_hacks import eye
+from GPflow.tf_wraps import eye
 from functools import reduce
 
 class Param(param.Param):

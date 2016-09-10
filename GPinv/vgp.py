@@ -4,7 +4,7 @@ from GPflow.param import Param, DataHolder
 from GPflow.model import GPModel
 from GPflow import transforms
 from GPflow.mean_functions import Zero
-from GPflow.tf_hacks import eye
+from GPflow.tf_wraps import eye
 from .param import DiagL, MultiDiagL
 
 class TransformedVGP(GPModel):

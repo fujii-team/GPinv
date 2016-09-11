@@ -39,7 +39,7 @@ In the future, GPinv will support more flexible models,
 ## Dependencies
 **GPinv** heavily depends on
 + [**TensorFlow**](https://www.tensorflow.org/): a Large-Scale Machine Learning library.
-+ [**GPflow**](https://github.com/GPflow/GPflow): a Gaussian Process libraries using Tensorflow.
++ [**GPflow**](https://github.com/GPflow/GPflow): a package for building Gaussian process models in python using TensorFlow.
 
 Before installing **GPinv**, these two libreries must be installed.
 

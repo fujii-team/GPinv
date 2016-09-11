@@ -10,7 +10,7 @@ This repository is currently for the **EDUCATIONAL** purpose for the software de
 
 ## Background
 
-We consider the following linear inverse problem,  
+We consider the following inverse problem,  
 <img src=doc/readme_imgs/definition.png>  
 where
 **y** is the noisy observation of
@@ -29,20 +29,17 @@ GPinv supports a linear model and some simple nonlinear models.
 is supported.
 
 + Nonlinear model [(Notebook)](notebooks/nonlinear_model_example.ipynb)
-
   - MCMC with a single latent function.
   - VGP with a stochastic integration.  
+  - SVGP with a sparse approximation of VGP [(notebook)](notebooks/sparse_nonlinear_model_example.ipynb).
 
 In the future, GPinv will support more flexible models,
 <img src=doc/readme_imgs/flexible_model.png> where observations are functions of multiple latent GP values.
 
-More computationally efficient methods are also planned to be implemented.
-
-
 ## Dependencies
 **GPinv** heavily depends on
-[**TensorFlow**](https://www.tensorflow.org/) and
-[**GPflow**](https://github.com/GPflow/GPflow).
++ [**TensorFlow**](https://www.tensorflow.org/): a Large-Scale Machine Learning library.
++ [**GPflow**](https://github.com/GPflow/GPflow): a package for building Gaussian process models in python using TensorFlow.
 
 Before installing **GPinv**, these two libreries must be installed.
 

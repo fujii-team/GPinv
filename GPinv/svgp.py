@@ -28,7 +28,8 @@ class TransformedSVGP(SVGP):
     SVGP for the transformed likelihood.
     """
     def __init__(self, X, Y, kern, likelihood, Z, mean_function=Zero(),
-                 num_latent=None, q_diag=False, whiten=True, minibatch_size=None):
+                 num_latent=None, q_diag=False, whiten=True, minibatch_size=None,
+                 X_minibatch=False):
         """
         - X is a data matrix, size N x D
         - Y is a data matrix, size N' x R
@@ -45,7 +46,11 @@ class TransformedSVGP(SVGP):
         if minibatch_size is None:
             minibatch_size = X.shape[0]
         self.num_data = X.shape[0]
-        X = DataHolder(X)
+
+        if X_minibatch:
+            X = MinibatchData(X, minibatch_size)
+        else:
+            X = DataHolder(X)
         Y = MinibatchData(Y, minibatch_size)
 
         # init the super class, accept args
@@ -82,5 +87,5 @@ class TransformedSVGP(SVGP):
         # Get variational expectations.
         var_exp = self.likelihood.stochastic_expectations(fmean, Lcov, self.Y)
         # re-scale for minibatch size
-        scale = tf.cast(self.num_data, tf.float64) / tf.cast(tf.shape(self.X)[0], tf.float64)
+        scale = tf.cast(self.num_data, tf.float64) / tf.cast(tf.shape(self.Y)[0], tf.float64)
         return tf.reduce_sum(var_exp) * scale - KL

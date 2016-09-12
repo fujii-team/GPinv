@@ -22,19 +22,18 @@ from GPflow.model import GPModel
 from GPflow.tf_wraps import eye
 from .param import DataHolder, Param
 from .mean_functions import Zero
+from .model_input import ModelInput
 
-class TransformedSVGP(SVGP):
+class MultilatentSVGP(SVGP):
     """
-    SVGP for the transformed likelihood.
+    SVGP for the transformed likelihood with multiple latent functions.
     """
-    def __init__(self, X, Y, kern, likelihood, Z, mean_function=Zero(),
-                 num_latent=None, q_diag=False, whiten=True, minibatch_size=None,
-                 X_minibatch=False):
+    def __init__(self, input_list,
+                 Y, likelihood, num_latent=None, q_diag=False, whiten=True,
+                 minibatch_size=None):
         """
-        - X is a data matrix, size N x D
+        - model_inputs: list of ModelInput objects.
         - Y is a data matrix, size N' x R
-        - kern, likelihood, mean_function are appropriate GPflow objects
-        - Z is a matrix of pseudo inputs, size M x D
         - num_latent is the number of latent process to use, default to
           Y.shape[1]
         - q_diag is a boolean. If True, the covariance is approximated by a
@@ -44,8 +43,8 @@ class TransformedSVGP(SVGP):
         """
         # sort out the X, Y into MiniBatch objects.
         if minibatch_size is None:
-            minibatch_size = Y.shape[0]
-        self.num_data = Y.shape[0]
+            minibatch_size = X.shape[0]
+        self.num_data = X.shape[0]
 
         if X_minibatch:
             X = MinibatchData(X, minibatch_size)

@@ -17,74 +17,78 @@
 
 import tensorflow as tf
 import numpy as np
-from GPflow.svgp import SVGP, MinibatchData
-from GPflow.model import GPModel
 from GPflow.tf_wraps import eye
-from .param import DataHolder, Param
-from .mean_functions import Zero
-from .model_input import ModelInput
+from .param import DataHolder, Param, Parameterized, ParamList, MinibatchData
+from .multilatent_param import IndexedDataHolder, IndexedParamList, ConcatParamList, SqrtParamList
+from .kernels import SwitchedKernel
+from .mean_functions import Zero, SwitchedMeanFunction
+from .svgp import TransformedSVGP
 
-class MultilatentSVGP(SVGP):
+
+class MultilatentSVGP(TransformedSVGP):
     """
     SVGP for the transformed likelihood with multiple latent functions.
     """
     def __init__(self, input_list,
-                 Y, likelihood, num_latent=None, q_diag=False, whiten=True,
-                 minibatch_size=None):
+                 Y, likelihood, num_latent=None,
+                 q_shape='fullrank',
+                 q_indices_list=None,
+                 minibatch_size=None, random_seed=0):
         """
         - model_inputs: list of ModelInput objects.
         - Y is a data matrix, size N' x R
         - num_latent is the number of latent process to use, default to
           Y.shape[1]
-        - q_diag is a boolean. If True, the covariance is approximated by a
-          diagonal matrix.
-        - whiten is a boolean. If True, we use the whitened representation of
-          the inducing points.
+        - q_shape is one of ['fullrank', 'diagonal', 'specified']
+        - q_indices_list is list of tuples, which indicates the corelation
+                                                between each model_input.
+        - minibatch_size is the size for the minibatching for Y
+        - random_seed is the seed for the Y-minibatching.
         """
-        # sort out the X, Y into MiniBatch objects.
+        self.input_list = input_list
+        # minibatch_size
         if minibatch_size is None:
             minibatch_size = X.shape[0]
-        self.num_data = X.shape[0]
+        self.num_data = Y.shape[0]
 
-        if X_minibatch:
-            X = MinibatchData(X, minibatch_size)
+        if q_shape is 'diagonal':
+            self.q_diag = True
         else:
-            X = DataHolder(X)
-        Y = MinibatchData(Y, minibatch_size)
+            self.q_diag = False
+        self.num_latent = num_latent or Y.shape[1]
+        self.num_inducing = np.sum([d.Z.shape[0] for d in self.input_list])
+
+        # Construct input vector, kernel, and mean_functions from input_list
+        X = IndexedDataHolder(self.input_list)
+        Y = MinibatchData(Y, minibatch_size, rng=np.random.RandomState(random_seed))
+
+        self.Z_list = IndexedParamList(self.input_list)
+        kern          = SwitchedKernel([d.kern          for d in input_list])
+        mean_function = SwitchedKernel([d.mean_function for d in input_list])
+        # assert likelihood is appropriate
+        assert isinstance(likelihood, MultilatentLikelihood)
+        likelihood.make_slice_indices(self.input_list)
 
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
-        self.q_diag, self.whiten = q_diag, whiten
-        self.Z = Param(Z)
-        self.num_latent = num_latent or Y.shape[1]
-        self.num_inducing = Z.shape[0]
 
         # init variational parameters
-        self.q_mu = Param(np.zeros((self.num_inducing, self.num_latent)))
+        self.q_mu_list = ConcatParamList(self.input_list, self.num_latent)
+
         if self.q_diag:
-            self.q_sqrt = Param(np.ones((self.num_inducing, self.num_latent)),
-                                transforms.positive)
+            self.q_sqrt_list = ConcatParamList(self.input_list, self.num_latent,
+                    [np.ones((z.shape[0], self.num_latent)) for z in self.Z_list],
+                    transforms.positive)
         else:
-            q_sqrt = np.array([np.eye(self.num_inducing)
-                               for _ in range(self.num_latent)]).swapaxes(0, 2)
-            self.q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform)
+            self.q_sqrt_list = SqrtParamList(self.input_list, self.num_latent,
+                                                        q_shape, q_indices_list)
 
-
-    def build_likelihood(self):
-        """
-        This gives a variational bound on the model likelihood.
-        """
-        # Get prior KL.
-        KL = self.build_prior_KL()
-        # Get conditionals
-        fmean, fcov = self.build_predict(self.X, full_cov=True)
-        # TODO Rank-two downgrade should be applied (if possible).
-        jitter = tf.tile(tf.expand_dims(eye(tf.shape(self.X)[0]), [0]),
-                        [self.num_latent, 1,1]) * 1.0e-6
-        Lcov = tf.transpose(
-                    tf.batch_cholesky(tf.transpose(fcov, [2,0,1]) + jitter), [1,2,0])
-        # Get variational expectations.
-        var_exp = self.likelihood.stochastic_expectations(fmean, Lcov, self.Y)
-        # re-scale for minibatch size
-        scale = tf.cast(self.num_data, tf.float64) / tf.cast(tf.shape(self.Y)[0], tf.float64)
-        return tf.reduce_sum(var_exp) * scale - KL
+    @property
+    def Z(self):
+        return self.Z_list.concat()
+    @property
+    def q_mu(self):
+        return self.q_mu_list.concat()
+    @property
+    def q_sqrt(self):
+        return self.q_sqrt_list.concat()

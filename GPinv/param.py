@@ -1,5 +1,6 @@
-from GPflow import param
 import tensorflow as tf
+import numpy as np
+from GPflow import param
 from GPflow import transforms
 from GPflow.tf_wraps import eye
 from GPflow import svgp
@@ -20,6 +21,7 @@ class Parameterized(param.Parameterized):
 class ParamList(param.ParamList):
     pass
 
+#TODO should be deprecated?
 class DiagL(Parameterized):
     """
     Cholesky object for a diagonal covariance matrix.

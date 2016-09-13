@@ -20,6 +20,7 @@ class test_vgp(unittest.TestCase):
         tf.set_random_seed(1)
 
     def test_svgp_full(self):
+        tf.set_random_seed(1)
         minibatchGaussian = MinibatchGaussian(self.num_params, self.num_params, 40)
         m_stvgp = SVGP(self.X, self.Y,
                     kern = GPflow.kernels.RBF(1),
@@ -27,7 +28,7 @@ class test_vgp(unittest.TestCase):
                     Z = self.X.copy())
         m_stvgp.Z.fixed = True
 
-        m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=2000)
+        m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=3000)
         obj_stvgp = np.mean(
                 [m_stvgp._objective(m_stvgp.get_free_state())[0] for i in range(10)])
         # needs rough agreement.
@@ -49,6 +50,7 @@ class test_vgp(unittest.TestCase):
         self.assertTrue(np.allclose(self.f_ref[1], f_stvgp[1], atol=0.2))
 
     def test_svgp_minibatch_inducing(self):
+        tf.set_random_seed(1)
         # with inducing point and minibatching
         inducing = 10
         minibatch_size = 20
@@ -59,7 +61,7 @@ class test_vgp(unittest.TestCase):
                     Z = np.linspace(0.5,5.5,inducing).reshape(-1,1),
                     minibatch_size=minibatch_size)
 
-        m_stvgp2.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=2000)
+        m_stvgp2.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=3000)
         obj_stvgp2 = np.mean(
                 [m_stvgp2._objective(m_stvgp2.get_free_state())[0] for i in range(10)])
         # needs rough agreement.
@@ -77,10 +79,13 @@ class test_vgp(unittest.TestCase):
 
         f_stvgp2=m_stvgp2.predict_f(self.Xnew)
 
+        # print(self.f_ref[0][:,0])
+        # print(f_stvgp2[0][:,0]-self.f_ref[0][:,0])
         self.assertTrue(np.allclose(self.f_ref[0], f_stvgp2[0], atol=0.2))
         self.assertTrue(np.allclose(self.f_ref[1], f_stvgp2[1], atol=0.2))
 
     def test_X_minibatch(self):
+        tf.set_random_seed(1)
         inducing = 15
         minibatch_size = 20
         m_stvgp2 = SVGP(self.X, self.Y,
@@ -90,7 +95,7 @@ class test_vgp(unittest.TestCase):
                     minibatch_size=minibatch_size,
                     X_minibatch=True)
 
-        m_stvgp2.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=2000)
+        m_stvgp2.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=3000)
         obj_stvgp2 = np.mean(
                 [m_stvgp2._objective(m_stvgp2.get_free_state())[0] for i in range(10)])
         # needs rough agreement.
@@ -106,8 +111,8 @@ class test_vgp(unittest.TestCase):
         self.assertTrue(np.allclose(self.m_ref.likelihood.variance.value,
                                     m_stvgp2.likelihood.variance.value, rtol=0.2))
         f_stvgp2=m_stvgp2.predict_f(self.Xnew)
-        print(self.f_ref[0][:,0])
-        print(f_stvgp2[0][:,0]-self.f_ref[0][:,0])
+        # print(self.f_ref[0][:,0])
+        # print(f_stvgp2[0][:,0]-self.f_ref[0][:,0])
         self.assertTrue(np.allclose(self.f_ref[0], f_stvgp2[0], atol=0.2))
         self.assertTrue(np.allclose(self.f_ref[1], f_stvgp2[1], atol=0.2))
 

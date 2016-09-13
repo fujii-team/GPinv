@@ -56,20 +56,31 @@ class TransformedSVGP(SVGP):
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
         self.q_diag, self.whiten = q_diag, whiten
-        self.Z = Param(Z)
+        self.Z_param = Param(Z)
         self.num_latent = num_latent or Y.shape[1]
         self.num_inducing = Z.shape[0]
 
         # init variational parameters
-        self.q_mu = Param(np.zeros((self.num_inducing, self.num_latent)))
+        self.q_mu_param = Param(np.zeros((self.num_inducing, self.num_latent)))
         if self.q_diag:
-            self.q_sqrt = Param(np.ones((self.num_inducing, self.num_latent)),
+            self.q_sqrt_param = Param(np.ones((self.num_inducing, self.num_latent)),
                                 transforms.positive)
         else:
             q_sqrt = np.array([np.eye(self.num_inducing)
                                for _ in range(self.num_latent)]).swapaxes(0, 2)
-            self.q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform)
+            self.q_sqrt_param = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform)
 
+    @property
+    def Z(self):
+        return self.Z_param
+
+    @property
+    def q_mu(self):
+        return self.q_mu_param
+
+    @property
+    def q_sqrt(self):
+        return self.q_sqrt_param
 
     def build_likelihood(self):
         """

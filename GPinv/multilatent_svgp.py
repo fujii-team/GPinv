@@ -18,11 +18,14 @@
 import tensorflow as tf
 import numpy as np
 from GPflow.tf_wraps import eye
+from GPflow.model import GPModel
+from . import transforms
 from .param import DataHolder, Param, Parameterized, ParamList, MinibatchData
 from .multilatent_param import IndexedDataHolder, IndexedParamList, ConcatParamList, SqrtParamList
-from .kernels import SwitchedKernel
+from .kernels import BlockDiagonalKernel
 from .mean_functions import Zero, SwitchedMeanFunction
 from .svgp import TransformedSVGP
+from .likelihoods import MultilatentLikelihood
 
 
 class MultilatentSVGP(TransformedSVGP):
@@ -46,10 +49,9 @@ class MultilatentSVGP(TransformedSVGP):
         - random_seed is the seed for the Y-minibatching.
         """
         self.input_list = input_list
-        # minibatch_size
-        if minibatch_size is None:
-            minibatch_size = X.shape[0]
         self.num_data = Y.shape[0]
+        # currently, whiten option is not supported.
+        self.whiten = False
 
         if q_shape is 'diagonal':
             self.q_diag = True
@@ -58,13 +60,16 @@ class MultilatentSVGP(TransformedSVGP):
         self.num_latent = num_latent or Y.shape[1]
         self.num_inducing = np.sum([d.Z.shape[0] for d in self.input_list])
 
+        if minibatch_size is None:
+            minibatch_size = self.num_data
+
         # Construct input vector, kernel, and mean_functions from input_list
         X = IndexedDataHolder(self.input_list)
         Y = MinibatchData(Y, minibatch_size, rng=np.random.RandomState(random_seed))
 
         self.Z_list = IndexedParamList(self.input_list)
-        kern          = SwitchedKernel([d.kern          for d in input_list])
-        mean_function = SwitchedKernel([d.mean_function for d in input_list])
+        kern          = BlockDiagonalKernel([d.kern          for d in input_list])
+        mean_function = SwitchedMeanFunction([d.mean_function for d in input_list])
         # assert likelihood is appropriate
         assert isinstance(likelihood, MultilatentLikelihood)
         likelihood.make_slice_indices(self.input_list)

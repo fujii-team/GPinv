@@ -6,7 +6,7 @@ from GPinv.multilatent_param import ModelInput, IndexedDataHolder, IndexedParamL
 import numpy as np
 import unittest
 
-class test_IndexedDataHolder_ParamList_SqrtParamList(unittest.TestCase):
+class test_multilatent_param(unittest.TestCase):
     def setUp(self):
         self.rng = np.random.RandomState(0)
         self.X1 = self.rng.randn(10, 2)
@@ -125,7 +125,7 @@ class test_IndexedDataHolder_ParamList_SqrtParamList(unittest.TestCase):
         m.diagParamList = ConcatParamList([self.model_input1, self.model_input2],
                             num_latent)
         # check without tf_mode
-        ref_diag = np.ones((self.Z1.shape[0] + self.Z2.shape[0], num_latent))
+        ref_diag = np.zeros((self.Z1.shape[0] + self.Z2.shape[0], num_latent))
         # check without tf_modek
         self.assertTrue(np.allclose(ref_diag, m.diagParamList.concat()))
 

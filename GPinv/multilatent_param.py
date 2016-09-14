@@ -62,11 +62,16 @@ class IndexedDataHolder(DataHolder):
             # TODO add float_type support
             np.hstack([item, np.ones((item.shape[0],1))*index]))
 
+    def concat(self):
+        """
+        Returns the concat vector.
+        """
+        return np.vstack([d._array for d, i
+            in zip(self.data_holders, list(range(len(self.data_holders))))])
+
     def get_feed_dict(self):
         # returns all the data
-        return {self._tf_array:
-            np.vstack([d._array for d, i
-                in zip(self.data_holders, list(range(len(self.data_holders))))])}
+        return {self._tf_array: self.concat()}
 
 
 class IndexedParamList(ParamList):

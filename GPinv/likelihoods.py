@@ -118,18 +118,18 @@ class MultilatentLikelihood(TransformedLikelihood):
         """
         self.slice_begin = []
         self.slice_size = []
-        num_Z_i = 0
+        num_X_i = 0
         for d in input_list:
-            self.slice_begin.append(num_Z_i)
-            self.slice_size.append(d.Z.shape[0])
-            num_Z_i += d.Z.shape[0]
+            self.slice_begin.append(num_X_i)
+            self.slice_size.append(d.X.shape[0])
+            num_X_i += d.X.shape[0]
 
     def transform_tensor(self, F):
         """
         :param tf.tensor F: shape []
         """
         F_list = []
-        for begin, size in zip(self.slice_begin, self.slice_end):
+        for begin, size in zip(self.slice_begin, self.slice_size):
             F_list.append(tf.slice(F, [0,begin,0], [-1,size,-1]))
         return self.transform(F_list)
 

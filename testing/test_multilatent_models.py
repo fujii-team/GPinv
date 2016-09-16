@@ -7,7 +7,7 @@ from GPinv import kernels, densities, transforms
 from GPinv.param import Param
 from GPinv.multilatent_models import ModelInput, ModelInputSet
 from GPinv.multilatent_gpmc import MultilatentGPMC
-from GPinv.multilatent_svgp import MultilatentSVGP
+#from GPinv.multilatent_svgp import MultilatentSVGP
 from GPinv.likelihoods import MultilatentLikelihood
 import GPinv
 

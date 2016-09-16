@@ -1,11 +1,13 @@
 import tensorflow as tf
+import numpy as np
 from GPflow.likelihoods import Likelihood
+from GPflow.priors import Gaussian
 from GPflow.tf_wraps import eye
-from .param import DataHolder
+from GPflow.model import GPModel
+from .param import Param, DataHolder
 from .gpmc import TransformedGPMC
 from .mean_functions import Zero
-from .likelihoods import TransformedLikelihood
-
+from .likelihoods import MultilatentLikelihood
 
 class MultilatentGPMC(TransformedGPMC):
     """
@@ -14,31 +16,36 @@ class MultilatentGPMC(TransformedGPMC):
     """
     SVGP for the transformed likelihood with multiple latent functions.
     """
-    def __init__(self, input_list,
-                 Y, likelihood, num_latent=None):
+    def __init__(self, model_input_set,
+                 Y, likelihood):
         """
-        - model_inputs: list of ModelInput objects.
+        - model_inputs_set: ModelInputSet object
         - Y is a data matrix, size N' x R
         - num_latent is the number of latent process to use, default to
           Y.shape[1]
-        - q_shape is one of ['fullrank', 'diagonal', 'specified']
-        - q_indices_list is list of tuples, which indicates the corelation
-                                                between each model_input.
-        - minibatch_size is the size for the minibatching for Y
-        - random_seed is the seed for the Y-minibatching.
         """
-        self.input_list = input_list
-        self.num_latent = num_latent or Y.shape[1]
+        self.model_input_set = model_input_set
+        self.num_latent = self.model_input_set.num_latent
 
         # Construct input vector, kernel, and mean_functions from input_list
-        X = IndexedDataHolder(self.input_list)
+        X = self.model_input_set.getConcat_X()
         Y = DataHolder(Y)
 
-        kern          = BlockDiagonalKernel([d.kern          for d in input_list])
-        mean_function = SwitchedMeanFunction([d.mean_function for d in input_list])
+        kern          = self.model_input_set.getKernel()
+        mean_function = self.model_input_set.getMeanFunction()
+
         # assert likelihood is appropriate
         assert isinstance(likelihood, MultilatentLikelihood)
-        likelihood.make_slice_indices(self.input_list)
+        slice_begin, slice_end = self.model_input_set.generate_X_slices()
+        likelihood.make_slice_indices(slice_begin, slice_end)
 
         # init the super class, accept args
-        TransformedSVGP.__init__(self, X, Y, kern, likelihood, mean_function)
+        GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
+        self.num_data = X.shape[0]
+        self.num_latent = self.model_input_set.num_latent
+        self.V = Param(np.zeros((self.num_data, self.num_latent)))
+        self.V.prior = Gaussian(0., 1.)
+
+    # overwrite cholesky method for speeding up
+    def getCholesky(self):
+        return self.kern.Cholesky(self.X)

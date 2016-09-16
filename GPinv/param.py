@@ -5,6 +5,7 @@ from GPflow import transforms
 from GPflow.tf_wraps import eye
 from GPflow import svgp
 from functools import reduce
+from .mean_functions import Zero
 
 class MinibatchData(svgp.MinibatchData):
     pass
@@ -20,6 +21,129 @@ class Parameterized(param.Parameterized):
 
 class ParamList(param.ParamList):
     pass
+
+#---------------- Objects used in multilatent model -----------
+
+
+class ConcatDataHolder(DataHolder):
+    """
+    A DataHolder for the multiple-latent model input.
+    We extend dimension of X where the last dimension shows the data index.
+    """
+    def __init__(self, Xlist, minibatch_sizes=None, random_seeds=0):
+        """
+        - Xlist: list of 2d-np.array, that will be treat as ConcatData
+        - minibatch_sizes: list of integer or None. If it is None,
+                        full of X are used. Otherwise, Minibatching was made.
+        - random_seeds: list of integer that is used for the random seed used
+                        for the minibatching-operation.
+        """
+        DataHolder.__init__(self, np.zeros((1,1)))
+        self.data_holders = []
+        for X, minibatch_size, seed in zip(Xlist, minibatch_sizes, random_seeds):
+            index = 1.0*len(self.data_holders)
+            if minibatch_size:
+                self.data_holders.append(
+                    MinibatchData(X, minibatch_size=minibatch_size,
+                                rng=np.random.RandomState(seed)))
+            else:
+                self.data_holders.append(
+                    DataHolder(X, on_shape_change='recompile'))
+
+    def __getitem__(self, index):
+        # Returns the data part of the array
+        return self.data_holders[index].value
+
+    def __setitem__(self, index, item):
+        # Set the data and attach the additional index
+        self.data_holders[index].set_data(item)
+
+    def concat(self):
+        """
+        Returns the concat vector.
+        """
+        return np.vstack([d._array for d in self.data_holders])
+
+    def get_feed_dict(self):
+        # returns all the data
+        return {self._tf_array: self.concat()}
+
+    @property
+    def shape(self):
+        shape0, shape1=0,0
+        for d in self.data_holders:
+            shape0 += d.shape[0]
+            shape1 = max(shape1, d.shape[1])
+        return [shape0, shape1]
+
+
+class ConcatParamList(ParamList):
+    """
+    A list of parameters that consists of multiple component and will be used
+    as one large parameter.
+
+    self.concat() provides the large np.array (or tf.tensor in _tf_mode)
+    """
+    def __init__(self, p_list, transform=transforms.Identity()):
+        """
+        - p_list: List of the initial values for the paramter.
+        - num_latent: integer, indicating number of latent function M.
+        - value_list: list of initial values
+        """
+        # number of all Z
+        num_p = np.sum([p.shape[0] for p in p_list])
+        # list of Param object
+        param_list = []
+        self.paddings_list = []
+        num_p_i = 0
+        for p in p_list:
+            param_list.append(Param(p, transform))
+            self.paddings_list.append(
+                        [[num_p_i, num_p - num_p_i - p.shape[0]], [0,0]])
+            num_p_i += p.shape[0]
+        # remember to call the parent's initializer
+        ParamList.__init__(self, param_list)
+
+    def concat(self):
+        """
+        Return q_sqrt matrix for whole the coordinates.
+        """
+        if self._tf_mode:
+            return reduce(tf.add, [tf.pad(param._tf_array, paddings)
+                                    for param, paddings
+                                    in zip(self._list, self.paddings_list)])
+        else: # return np
+            return reduce(np.add, [np.pad(param.value, paddings, mode='constant')
+                                    for param, paddings
+                                    in zip(self._list, self.paddings_list)])
+
+class SqrtParamList(ConcatParamList):
+    """
+    A list of Block matrix parameters, used for the Cholesky factor parameter.
+    """
+    def __init__(self, indices_list, q_sqrt_list, paddings_list):
+        """
+        - indices_list: List of tuples that indicates the non-zero matrix
+                            blocks. Each tuple should be like (i, j)
+                            with i >= j, where i-th and j-th parameters have
+                            correlation, and N is the size of the corresponding
+                            parameter.
+        - q_sqrt_list: List of 3d-np.array with size [N,N,M].
+                            They should indicate the initial values of q_sqrt.
+        """
+        assert len(indices_list) == len(q_sqrt_list)
+        assert len(indices_list) == len(paddings_list)
+
+        self.paddings_list = paddings_list
+        param_list = []    # list of Param object
+        for i in range(len(indices_list)):
+            indices = indices_list[i]
+            q_sqrt = q_sqrt_list[i]
+            param_list.append(Param(q_sqrt))
+        # remember to call the parent's initializer
+        ParamList.__init__(self, param_list)
+
+
 
 #TODO should be deprecated?
 class DiagL(Parameterized):

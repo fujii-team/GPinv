@@ -1,5 +1,8 @@
 from __future__ import print_function
-from GPinv.kernels import Zero, RBF_csym, BlockDiagonalKernel
+import GPinv
+from GPinv.kernels import Zero, RBF, RBF_csym, BlockDiagonal
+from GPinv.param import ConcatDataHolder, ConcatParamList
+from GPinv.multilatent_models import ModelInput, ModelInputSet
 import GPflow
 import numpy as np
 import unittest
@@ -94,12 +97,12 @@ class test_RBF_csym(unittest.TestCase):
         self.assertTrue(np.allclose(Kxx2, Kxx2_ref))
         self.assertTrue(np.allclose(Kdiag, Kdiag_ref))
 
-class ref_block_diagonal_kernel(object):
+class ref_rbf(object):
     """
     Reference class for block_diagonal_kernel with rbf kernel.
     """
-    def __init__(self, rbf_kern_list):
-        self.kern_list = rbf_kern_list
+    def __init__(self, kern):
+        self.kern = kern
 
     def K(self, X, X2=None):
         """
@@ -110,58 +113,76 @@ class ref_block_diagonal_kernel(object):
 
         K_mat = np.zeros((X.shape[0], X2.shape[0]))
         for i in range(X.shape[0]):
-            ind = int(X[i, -1])
             for j in range(X2.shape[0]):
-                ind2 = int(X2[j, -1])
-                if ind == ind2:
-                    var = self.kern_list[ind].variance.value
-                    length = self.kern_list[ind].lengthscales.value
-                    x_dif = (X[i, :-1] - X2[j, :-1])/length
-                    sq_dist = np.sum(x_dif*x_dif)
-                    K_mat[i, j] = \
-                            var * np.exp(-0.5 * sq_dist)
+                var = self.kern.variance.value
+                length = self.kern.lengthscales.value
+                x_dif = (X[i] - X2[j])/length
+                sq_dist = np.sum(x_dif*x_dif)
+                K_mat[i, j] = var * np.exp(-0.5 * sq_dist)
         return K_mat
 
     def Kdiag(self, X):
         K_diag = np.zeros(X.shape[0])
         for i in range(X.shape[0]):
-            ind = int(X[i, -1])
-            var = self.kern_list[ind].variance.value
+            var = self.kern.variance.value
             K_diag[i] = var
         return K_diag
 
 
+class test_block_diagonal(unittest.TestCase):
+    def setUp(self):
+        self.rng = np.random.RandomState(0)
+        self.X1 = self.rng.randn(10, 2)
+        self.Z1 = self.rng.randn( 3, 2)
+        self.model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2), self.Z1)
 
+        self.X2 = self.rng.randn(11, 2)
+        self.Z2 = self.rng.randn( 4, 2)
+        self.model_input2 = ModelInput(self.X2, GPinv.kernels.RBF(2), self.Z2)
 
-class test_block_diagonal_kernel(unittest.TestCase):
     def test(self):
-        rng = np.random.RandomState(0)
-
-        X = np.hstack([rng.randn(10,2), rng.randint(0,2,10).reshape(-1,1)])
-        X2= np.hstack([rng.randn(12,2), rng.randint(0,2,12).reshape(-1,1)])
-
-        kernels = [GPflow.kernels.RBF(2),GPflow.kernels.RBF(2)]
-        kernels[1].variance = 2.0
-        kernels[1].lengthscales = 2.0
-        kern_ref = ref_block_diagonal_kernel(kernels)
+        model_input1 = ModelInput(self.X1, RBF(2), self.Z1)
+        model_input2 = ModelInput(self.X2, RBF(2), self.Z2)
+        model_input_set = ModelInputSet([model_input1, model_input2])
 
         m = GPflow.model.Model()
-        m.kern = BlockDiagonalKernel(kernels)
-        m.X = GPflow.param.DataHolder(X)
-        m.X2= GPflow.param.DataHolder(X2)
+        jitter = 1.0e-3
+        m.kern = model_input_set.getKernel(jitter=1.0e-3)
+        m.X = model_input_set.getConcat_X()
+        m.Z = model_input_set.getConcat_Z()
 
         tf_array = m.get_free_state()
         m.make_tf_array(tf_array)
         sess = tf.Session()
         sess.run(tf.initialize_all_variables())
         with m.tf_mode():
-            Kxx  = sess.run(m.kern.K(m.X), feed_dict = m.get_feed_dict())
-            Kxx2 = sess.run(m.kern.K(m.X, m.X2), feed_dict = m.get_feed_dict())
-            Kdiag = sess.run(m.kern.Kdiag(m.X), feed_dict = m.get_feed_dict())
-
-        self.assertTrue(np.allclose(Kxx, kern_ref.K(X, X)))
-        self.assertTrue(np.allclose(Kxx2, kern_ref.K(X, X2)))
-        self.assertTrue(np.allclose(Kdiag, kern_ref.Kdiag(X)))
+            Kxx  = sess.run(m.kern.K(m.Z.concat()), feed_dict = m.get_feed_dict())
+            Kxx2 = sess.run(m.kern.K(m.Z.concat(), m.X), feed_dict = m.get_feed_dict())
+            Kdiag = sess.run(m.kern.Kdiag(m.Z.concat()), feed_dict = m.get_feed_dict())
+            cholesky = sess.run(m.kern.Cholesky(m.Z.concat()), feed_dict = m.get_feed_dict())
+        # reference kernel
+        kern_ref = ref_rbf(m.kern.kern_list[0])
+        # Kxx
+        # diagonal block
+        self.assertTrue(np.allclose(kern_ref.K(self.Z1, self.Z1), Kxx[:3,:3]))
+        self.assertTrue(np.allclose(kern_ref.K(self.Z2, self.Z2), Kxx[3:,3:]))
+        # non-diagonal block
+        self.assertTrue(np.allclose(np.zeros((self.Z2.shape[0],self.Z1.shape[0])), Kxx[3:,:3]))
+        self.assertTrue(np.allclose(np.zeros((self.Z1.shape[0],self.Z2.shape[0])), Kxx[:3,3:]))
+        # Kxx2
+        # diagonal block
+        self.assertTrue(np.allclose(kern_ref.K(self.Z1, self.X1), Kxx2[:3,:10]))
+        self.assertTrue(np.allclose(kern_ref.K(self.Z2, self.X2), Kxx2[3:,10:]))
+        # non-diagonal block
+        self.assertTrue(np.allclose(np.zeros((self.Z2.shape[0],self.X1.shape[0])), Kxx2[3:,:10]))
+        self.assertTrue(np.allclose(np.zeros((self.Z1.shape[0],self.X2.shape[0])), Kxx2[:3,10:]))
+        # Kdiag
+        self.assertTrue(np.allclose(kern_ref.Kdiag(self.Z2), Kdiag[3:]))
+        self.assertTrue(np.allclose(kern_ref.Kdiag(self.Z1), Kdiag[:3]))
+        # cholesky
+        Kxx_cholesky = np.dot(cholesky, np.transpose(cholesky))
+        Kxx_jitter = Kxx + np.eye(self.Z1.shape[0]+self.Z2.shape[0])*jitter
+        self.assertTrue(np.allclose(Kxx_cholesky, Kxx_jitter))
 
 if __name__ == '__main__':
     unittest.main()

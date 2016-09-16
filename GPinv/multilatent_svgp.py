@@ -22,7 +22,7 @@ from GPflow.model import GPModel
 from . import transforms
 from .param import DataHolder, Param, Parameterized, ParamList, MinibatchData
 from .multilatent_param import IndexedDataHolder, IndexedParamList, ConcatParamList, SqrtParamList
-from .kernels import BlockDiagonalKernel
+from .kernels import BlockDiagonal
 from .mean_functions import Zero, SwitchedMeanFunction
 from .svgp import TransformedSVGP
 from .likelihoods import MultilatentLikelihood
@@ -32,7 +32,7 @@ class MultilatentSVGP(TransformedSVGP):
     """
     SVGP for the transformed likelihood with multiple latent functions.
     """
-    def __init__(self, input_list,
+    def __init__(self, model_input_set,
                  Y, likelihood, num_latent=None,
                  q_shape='fullrank',
                  q_indices_list=None,
@@ -48,31 +48,30 @@ class MultilatentSVGP(TransformedSVGP):
         - minibatch_size is the size for the minibatching for Y
         - random_seed is the seed for the Y-minibatching.
         """
-        self.input_list = input_list
+        self.model_input_set = model_input_set
         self.num_data = Y.shape[0]
         # currently, whiten option is not supported.
         self.whiten = False
 
-        if q_shape is 'diagonal':
-            self.q_diag = True
-        else:
-            self.q_diag = False
-        self.num_latent = num_latent or Y.shape[1]
-        self.num_inducing = np.sum([d.Z.shape[0] for d in self.input_list])
+        self.num_latent = self.model_input_set.num_latent
 
         if minibatch_size is None:
             minibatch_size = self.num_data
 
         # Construct input vector, kernel, and mean_functions from input_list
-        X = IndexedDataHolder(self.input_list)
+        X = M(self.input_list)
         Y = MinibatchData(Y, minibatch_size, rng=np.random.RandomState(random_seed))
 
-        self.Z_list = IndexedParamList(self.input_list)
-        kern          = BlockDiagonalKernel([d.kern          for d in input_list])
-        mean_function = SwitchedMeanFunction([d.mean_function for d in input_list])
+        kern          = self.model_input_set.getKernel()
+        mean_function = self.model_input_set.getMeanFunction()
+
         # assert likelihood is appropriate
         assert isinstance(likelihood, MultilatentLikelihood)
-        likelihood.make_slice_indices(self.input_list)
+        slice_begin, slice_end = self.model_input_set.generate_X_slices()
+        likelihood.make_slice_indices(slice_begin, slice_end)
+
+        self.Z_list = IndexedParamList(self.input_list)
+        self.num_inducing = self.Z_list.shape[0]
 
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)

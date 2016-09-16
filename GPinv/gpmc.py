@@ -39,8 +39,11 @@ class TransformedGPMC(GPMC):
         model.
             \log p(Y, V | theta).
         """
-        K = self.kern.K(self.X)
-        L = tf.cholesky(K) + eye(tf.shape(self.X)[0])*1e-6
+        L = self.getCholesky()
         F = tf.matmul(L, self.V) + self.mean_function(self.X)
         # TransformedLikelihood shoule have logp_gpmc method.
         return tf.reduce_sum(self.likelihood.logp_gpmc(F, self.Y))
+
+    def getCholesky(self):
+        K = self.kern.K(self.X)
+        return tf.cholesky(K + eye(tf.shape(K)[0])*1e-6)

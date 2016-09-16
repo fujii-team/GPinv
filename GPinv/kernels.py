@@ -1,5 +1,6 @@
 import tensorflow as tf
 import GPflow
+from GPflow.tf_wraps import eye
 from .param import ParamList
 
 class Zero(GPflow.kernels.Kern):
@@ -83,79 +84,60 @@ class Coregion(GPflow.kernels.Coregion):
     """  Identical to GPflow.kernels.Coregion    """
     pass
 
-class SwitchedKernel(GPflow.kernels.Kern):
+#---------------- Kernels for the multilatent model ------------------
+class BlockDiagonal(GPflow.kernels.Kern):
     """
     Block-wise kernel.
     The selection of the block is made by the extra dimension of X.
     """
-    def __init__(self, kernel_list):
+    def __init__(self, kern_list,
+                        slice_X_begin, slice_X_size,
+                        slice_X2_begin, slice_X2_size, jitter=0.):
         """
-        kernel_list should be a symmetric 2d-matrix.
+        - kern_list : list of Kernels.
         """
         GPflow.kernels.Kern.__init__(self, 1, 1)
-        self.kernel_list = ParamList([ParamList(k_list) for k_list in kernel_list])
-        self.num_kernel = len(kernel_list)
+        self.kern_list = ParamList(kern_list)
+        # set the slice indices
+        self.slice_X_begin, self.slice_X_size = slice_X_begin, slice_X_size
+        self.slice_X2_begin, self.slice_X2_size = slice_X2_begin, slice_X2_size
+        self.jitter = jitter
 
     def K(self, X, X2=None):
-        # ind = X[:,-1]
-        ind = tf.cast(tf.gather(tf.transpose(X), tf.shape(X)[1]-1), tf.int32)
-        # X = X[:,:-1]
-        X = tf.transpose(tf.gather(tf.transpose(X), tf.range(0, tf.shape(X)[1]-1)))
-        # split up X into chunks corresponding to the relevant likelihoods
-        x_list = tf.dynamic_partition(X, ind, self.num_kernel)
-        # partition for X
-        partitions = tf.dynamic_partition(tf.range(0, tf.size(ind)), ind, self.num_kernel)
-        # prepare x2_list, ind2, partitions2
         if X2 is None:
-            x2_list = x_list
-            partitions2 = tf.dynamic_partition(tf.range(0, tf.size(ind)), ind, self.num_kernel)
+            return reduce(tf.add,
+                [tf.pad(k.K(tf.slice(X, [begin,0], [size, -1])),
+                        [[begin,tf.shape(X)[0]-begin-size],
+                         [begin,tf.shape(X)[0]-begin-size]])
+                    for k,begin,size
+                    in zip(self.kern_list, self.slice_X_begin, self.slice_X_size)])
         else:
-            # ind2 = X2[:,-1]
-            ind2 = tf.cast(tf.gather(tf.transpose(X2), tf.shape(X2)[1]-1), tf.int32)
-            # split up X2
-            X2 = tf.transpose(tf.gather(tf.transpose(X2), tf.range(0, tf.shape(X2)[1]-1)))
-            x2_list = tf.dynamic_partition(X2, ind2, self.num_kernel)
-            # partition for X2
-            partitions2 = tf.dynamic_partition(tf.range(0, tf.size(ind2)), ind2, self.num_kernel)
-
-        # calculate k and stitch togather
-        k_mat = []
-        for x, k2_list in zip(x_list, self.kernel_list):
-            k_vec = []
-            for x2, k in zip(x2_list, k2_list):
-                # tf.shape(k_vec[i]) = [x2[i].shape[0], x.shape[0]]
-                k_vec.append(k.K(x2, x))
-            # tf.shape(k_mat[j]) = []
-            k_mat.append(tf.transpose(tf.dynamic_stitch(partitions2, k_vec)))
-        return tf.dynamic_stitch(partitions, k_mat)
+            return reduce(tf.add,
+                [tf.pad(k.K(tf.slice(X, [begin,0], [size, -1]),
+                            tf.slice(X2,[begin2,0],[size2,-1])),
+                        [[begin,tf.shape(X)[0]-begin-size],
+                         [begin2,tf.shape(X2)[0]-begin2-size2]])
+                    for k,begin,size,begin2,size2
+                    in zip(self.kern_list, self.slice_X_begin, self.slice_X_size,
+                                           self.slice_X2_begin,self.slice_X2_size)])
 
     def Kdiag(self, X):
-        # ind = X[:,-1]
-        ind = tf.cast(tf.gather(tf.transpose(X), tf.shape(X)[1]-1), tf.int32)
-        # X = X[:,:-1]
-        X = tf.transpose(tf.gather(tf.transpose(X), tf.range(0, tf.shape(X)[1]-1)))
-        # split up X into chunks corresponding to the relevant likelihoods
-        x_list = tf.dynamic_partition(X, ind, self.num_kernel)
-        # apply the kernel to each section of the data
-        results = [self.kernel_list[i][i].Kdiag(x_list[i]) for i in range(len(x_list))]
-        # partition for X2
-        partitions = tf.dynamic_partition(tf.range(0, tf.size(ind)), ind, self.num_kernel)
-        return tf.dynamic_stitch(partitions, results)
+        return reduce(tf.add,
+            [tf.pad(k.Kdiag(tf.slice(X, [begin,0], [size, -1])),
+                    [[begin,tf.shape(X)[0]-begin-size]])
+                for k,begin,size
+                in zip(self.kern_list, self.slice_X_begin, self.slice_X_size)])
 
-
-class BlockDiagonalKernel(SwitchedKernel):
-    def __init__(self, kernel_list):
+    def Cholesky(self, X):
         """
-        kernel_list is 1d list of kernel.
+        Compute the cholesky decomposition for K(X).
+        Since this kernel is block diagonal, it can be computed very efficiently.
         """
-        # generate block diagonal kernel_matrix with Zero kernel
-        kernel_list2d = []
-        for i in range(len(kernel_list)):
-            kernel_list1d = []
-            for j in range(len(kernel_list)):
-                if i != j:
-                    kernel_list1d.append(Zero(0))
-                else:
-                    kernel_list1d.append(kernel_list[i])
-            kernel_list2d.append(kernel_list1d)
-        SwitchedKernel.__init__(self, kernel_list2d)
+        return reduce(tf.add,
+            [tf.pad(
+                tf.cholesky(k.K(tf.slice(X, [begin,0], [size, -1])) + self.jitter*eye(size)),
+                    [[begin,tf.shape(X)[0]-begin-size],
+                     [begin,tf.shape(X)[0]-begin-size]])
+                for k,begin,size
+                in zip(self.kern_list, self.slice_X_begin, self.slice_X_size)]
+            )

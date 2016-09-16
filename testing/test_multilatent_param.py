@@ -2,7 +2,8 @@ import tensorflow as tf
 import GPflow
 import GPinv
 from GPinv import transforms
-from GPinv.multilatent_param import ModelInput, IndexedDataHolder, IndexedParamList, ConcatParamList, SqrtParamList
+from GPinv.param import ConcatDataHolder, ConcatParamList, SqrtParamList
+from GPinv.multilatent_models import ModelInput, ModelInputSet
 import numpy as np
 import unittest
 
@@ -11,137 +12,129 @@ class test_multilatent_param(unittest.TestCase):
         self.rng = np.random.RandomState(0)
         self.X1 = self.rng.randn(10, 2)
         self.Z1 = self.rng.randn( 3, 2)
-        self.model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2), self.Z1,
-                        X_minibatch_size=3, random_seed=1)
 
         self.X2 = self.rng.randn(10, 2)
         self.Z2 = self.rng.randn( 3, 2)
-        self.model_input2 = ModelInput(self.X2, GPinv.kernels.RBF(2), self.Z2,
-                        X_minibatch_size=3, random_seed=2)
-        # manual input of the reference
-        ref = []
-        for x in self.X1:
-            ref.append([x[0], x[1], 0])
-        for x in self.X2:
-            ref.append([x[0], x[1], 1])
-        self.ref = np.array(ref)
 
-        refZ = []
-        for z in self.Z1:
-            refZ.append([z[0], z[1], 0])
-        for z in self.Z2:
-            refZ.append([z[0], z[1], 1])
-        self.refZ = np.array(refZ)
+        # manually generate X concat to make sure it aligns correctly.
+        self.X_concat = np.ndarray((20,2))
+        for i in range(len(self.X1)):
+            self.X_concat[i,:] = self.X1[i,:]
+        for i in range(len(self.X2)):
+            self.X_concat[i+10,:] = self.X2[i,:]
+        # manually generate X concat to make sure it aligns correctly.
+        self.Z_concat = np.ndarray((6,2))
+        for i in range(len(self.Z1)):
+            self.Z_concat[i,:] = self.Z1[i,:]
+        for i in range(len(self.Z2)):
+            self.Z_concat[i+3,:] = self.Z2[i,:]
 
-    def test_IndexedDataHolder(self):
+
+    def test_ConcatDataHolder(self):
+        model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2))
+        model_input2 = ModelInput(self.X2, GPinv.kernels.RBF(2))
+        input_set = ModelInputSet([model_input1, model_input2])
+
         m = GPflow.model.Model()
-        m.indexedData = IndexedDataHolder([self.model_input1, self.model_input2])
+        m.concatData = input_set.getConcat_X()
         with m.tf_mode():
-            X = m._session.run(m.indexedData, feed_dict = m.get_feed_dict())
-        self.assertTrue(np.allclose(self.ref, X))
-        # make sure the last dimension is the index
-        self.assertTrue(X[2, -1] == 0.0)
-        self.assertTrue(X[12, -1] == 1.0)
+            X = m._session.run(tf.identity(m.concatData), feed_dict = m.get_feed_dict())
 
+        self.assertTrue(np.allclose(self.X_concat, X))
         # test getitem
-        self.assertTrue(np.allclose(self.X1, m.indexedData[0]))
+        self.assertTrue(np.allclose(self.X_concat, m.concatData.concat()))
         # test setitem
+        # make sure assigning.
         X2 = self.rng.randn(10,2)
-        m.indexedData[1] = X2
-        self.assertTrue(np.allclose(X2, m.indexedData[1]))
-
-    def test_IndexedParamList(self):
-        m = GPflow.model.Model()
-        m.indexedParam = IndexedParamList([self.model_input1, self.model_input2])
-        self.assertTrue(np.allclose(self.refZ, m.indexedParam.concat()))
-        # tf_mode
-        free_var = m.get_free_state()
-        m.make_tf_array(free_var)
-        with m.tf_mode():
-            Z = m._session.run(m.indexedParam.concat(), feed_dict = m.get_feed_dict())
-        self.assertTrue(np.allclose(self.refZ, Z))
-
-    def test_SqrtParamList(self):
-        m = GPflow.model.Model()
-        indices_list = [(0,0),(1,1),(1,0)]
-        num_latent = 2
-        m.sqrtParamList = SqrtParamList([self.model_input1, self.model_input2],
-                                        num_latent,
-                                        q_shape='specified',
-                                        indices_list=indices_list)
-        # check without tf_mode
-        ref_sqrt = np.tile(np.expand_dims(np.eye(self.Z1.shape[0] + self.Z2.shape[0]),
-                                        2), [1,1,num_latent])
-        self.assertTrue(np.allclose(ref_sqrt, m.sqrtParamList.concat()))
-        # check with tf_mode
-        # tf_mode
-        free_var = m.get_free_state()
-        m.make_tf_array(free_var)
-        with m.tf_mode():
-            sqrt = m._session.run(m.sqrtParamList.concat(), feed_dict = m.get_feed_dict())
-        self.assertTrue(np.allclose(ref_sqrt, m.sqrtParamList.concat()))
-        # check no-good index
-        with self.assertRaises(ValueError):
-            tmp = SqrtParamList([self.model_input1, self.model_input2],
-                                         num_latent,
-                                         q_shape='specified',
-                                         indices_list=[(0,0),(1,1),(0,1)])
-
-    def test_SqrtParamList_given(self):
-        m = GPflow.model.Model()
-        indices_list = [(0,0),(1,1),(1,0)]
-        num_latent = 2
-        sqrt_input =[]
-        for i in range(3):
-            sqrt_input.append(self.rng.randn(3,3,2))
-        # manual creation of the reference.
-        ref_sqrt = np.pad(sqrt_input[0],[[0,3],[0,3],[0,0]], mode='constant')
-        ref_sqrt+= np.pad(sqrt_input[1],[[3,0],[3,0],[0,0]], mode='constant')
-        ref_sqrt+= np.pad(sqrt_input[2],[[3,0],[0,3],[0,0]], mode='constant')
-
-        m.sqrtParamList = SqrtParamList([self.model_input1, self.model_input2],
-                            num_latent,
-                            q_shape='specified',
-                            indices_list=indices_list,
-                            q_sqrt_list=sqrt_input)
-        # check without tf_mode
-        self.assertTrue(np.allclose(ref_sqrt, m.sqrtParamList.concat()))
-
-    def test_SqrtParamList_full(self):
-        m = GPflow.model.Model()
-        num_latent = 2
-        m.sqrtParamList = SqrtParamList([self.model_input1, self.model_input2],
-                            num_latent,
-                            q_shape='fullrank')
-        # check without tf_mode
-        ref_sqrt = np.tile(np.expand_dims(np.eye(self.Z1.shape[0] + self.Z2.shape[0]),
-                                        2), [1,1,num_latent])
-        # check without tf_mode
-        self.assertTrue(np.allclose(ref_sqrt, m.sqrtParamList.concat()))
+        m.concatData[1] = X2
+        self.assertTrue(np.allclose(X2, m.concatData[1]))
 
     def test_ConcatParamList(self):
         m = GPflow.model.Model()
-        num_latent = 2
-        m.diagParamList = ConcatParamList([self.model_input1, self.model_input2],
-                            num_latent)
-        # check without tf_mode
-        ref_diag = np.zeros((self.Z1.shape[0] + self.Z2.shape[0], num_latent))
-        # check without tf_modek
-        self.assertTrue(np.allclose(ref_diag, m.diagParamList.concat()))
+        m.concatParam = ConcatParamList([self.Z1, self.Z2])
+        m.make_tf_array(m.get_free_state())
+        with m.tf_mode():
+            Z = m._session.run(tf.identity(m.concatParam.concat()), feed_dict = m.get_feed_dict())
+        self.assertTrue(np.allclose(self.Z_concat, Z))
+        self.assertTrue(np.allclose(self.Z_concat, m.concatParam.concat()))
 
-    def test_ConcatParamList_given(self):
+    def test_ConcatParamList_InputSet(self):
+        model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2), Z=self.Z1)
+        model_input2 = ModelInput(self.X2, GPinv.kernels.RBF(2), Z=self.Z2)
+        input_set = ModelInputSet([model_input1, model_input2])
         m = GPflow.model.Model()
-        num_latent = 2
-        diag_input = []
-        for i in range(2):
-            diag_input.append(self.rng.randn(3,num_latent))
-        m.diagParamList = ConcatParamList([self.model_input1, self.model_input2],
-                            num_latent, value_list = diag_input)
+        m.concatParam = input_set.getConcat_Z()
+        m.make_tf_array(m.get_free_state())
+        with m.tf_mode():
+            Z = m._session.run(tf.identity(m.concatParam.concat()), feed_dict = m.get_feed_dict())
+        self.assertTrue(np.allclose(self.Z_concat, Z))
+        self.assertTrue(np.allclose(self.Z_concat, m.concatParam.concat()))
 
-        # check without tf_mode
-        ref_diag = np.vstack(diag_input)
-        # check without tf_modek
-        self.assertTrue(np.allclose(ref_diag, m.diagParamList.concat()))
+    def test_ConcatParamList_InputSetDefault(self):
+        model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2))
+        model_input2 = ModelInput(self.X2, GPinv.kernels.RBF(2))
+        input_set = ModelInputSet([model_input1, model_input2])
+        m = GPflow.model.Model()
+        m.concatParam = input_set.getConcat_Z()
+        m.make_tf_array(m.get_free_state())
+        with m.tf_mode():
+            Z = m._session.run(tf.identity(m.concatParam.concat()), feed_dict = m.get_feed_dict())
+        self.assertTrue(np.allclose(self.X_concat, Z))
+        self.assertTrue(np.allclose(self.X_concat, m.concatParam.concat()))
+
+    def test_SqrtParamList_full(self):
+        model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2))
+        model_input2 = ModelInput(self.X2, GPinv.kernels.RBF(2))
+        # with default values
+        input_set = ModelInputSet([model_input1, model_input2],
+                                q_shape='fullrank')
+        # with specified values
+        q_list = [self.rng.randn(10,10,1), self.rng.randn(10,10,1), self.rng.randn(10,10,1)]
+        input_set2 = ModelInputSet([model_input1, model_input2],
+                                q_shape='fullrank', q_sqrt_list=q_list)
+        m = GPflow.model.Model()
+        m.sqrtParam = input_set.getConcat_q_sqrt()
+        m.sqrtParam2 = input_set2.getConcat_q_sqrt()
+        m.make_tf_array(m.get_free_state())
+        with m.tf_mode():
+            qsqrt  = m._session.run(tf.identity(m.sqrtParam.concat()), feed_dict = m.get_feed_dict())
+            qsqrt2 = m._session.run(tf.identity(m.sqrtParam2.concat()), feed_dict = m.get_feed_dict())
+
+        q_sqrt_ref = np.zeros((20,20,1))
+        for i in range(20):
+            q_sqrt_ref[i,i,0] = 1.
+        q_sqrt_ref2 = np.zeros((20,20,1))
+        q_sqrt_ref2[:10, :10] = q_list[0]
+        q_sqrt_ref2[10:, :10] = q_list[1]
+        q_sqrt_ref2[10:, 10:] = q_list[2]
+        self.assertTrue(np.allclose(q_sqrt_ref, qsqrt))
+        self.assertTrue(np.allclose(q_sqrt_ref2, qsqrt2))
+        self.assertTrue(np.allclose(q_sqrt_ref, m.sqrtParam.concat()))
+        self.assertTrue(np.allclose(q_sqrt_ref2, m.sqrtParam2.concat()))
+
+    def test_SqrtParamList_diag(self):
+        model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2))
+        model_input2 = ModelInput(self.X2, GPinv.kernels.RBF(2))
+        # with default values
+        q_list = [np.exp(self.rng.randn(10,1)), np.exp(self.rng.randn(10,1))]
+        input_set = ModelInputSet([model_input1, model_input2],
+                                q_shape='diagonal')
+        input_set2 = ModelInputSet([model_input1, model_input2],
+                                q_shape='diagonal', q_sqrt_list=q_list)
+        m = GPflow.model.Model()
+        m.sqrtParam = input_set.getConcat_q_sqrt()
+        m.sqrtParam2 = input_set2.getConcat_q_sqrt()
+        m.make_tf_array(m.get_free_state())
+        with m.tf_mode():
+            qsqrt  = m._session.run(tf.identity(m.sqrtParam.concat()), feed_dict = m.get_feed_dict())
+            qsqrt2 = m._session.run(tf.identity(m.sqrtParam2.concat()), feed_dict = m.get_feed_dict())
+
+        q_sqrt_ref = np.ones((20,1))
+        q_sqrt_ref2 = np.vstack(q_list)
+        self.assertTrue(np.allclose(q_sqrt_ref, qsqrt))
+        self.assertTrue(np.allclose(q_sqrt_ref2, qsqrt2))
+        self.assertTrue(np.allclose(q_sqrt_ref, m.sqrtParam.concat()))
+        self.assertTrue(np.allclose(q_sqrt_ref2, m.sqrtParam2.concat()))
 
 
 

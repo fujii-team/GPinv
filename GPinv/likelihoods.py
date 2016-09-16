@@ -2,13 +2,14 @@ import tensorflow as tf
 import numpy as np
 from GPflow.likelihoods import Likelihood
 from GPflow import transforms
+from GPflow.tf_wraps import eye
 from GPflow.param import Param, DataHolder
 from GPflow.likelihoods import Likelihood
 from GPflow import densities
 from .param import MinibatchData
 
 class TransformedLikelihood(Likelihood):
-    def __init__(self, num_samples=20):
+    def __init__(self, num_samples=20, jitter=1.0e-6):
         """
         Likelihood with correlation.
         :param num_samples: number of random point to approximate the
@@ -17,8 +18,9 @@ class TransformedLikelihood(Likelihood):
         Likelihood.__init__(self)
         # number of random numbers to approximate the integration
         self.num_samples = num_samples
+        self.jitter=jitter
 
-    def stochastic_expectations(self, Fmu, L, Y):
+    def stochastic_expectations(self, Fmu, cov, Y):
         """
         Evaluate variational expectation based on the stochastic method.
         We assume the likelihood is independent to some transform of the latent
@@ -32,20 +34,21 @@ class TransformedLikelihood(Likelihood):
 
         :args
          Fmu: Mean of the latent function. shape=[N,M]
-         L  : Cholesky of covariance. shape=[N,N,M]
+         cov: Covariance of the posterior. shape=[N,N,M]
          Y  : Data. shape=[N',M']
 
         :return
          Stochastic approximation of
-         \integ{logp(Y|f) N(f|Fmu,LLt) df}
+         \integ{logp(Y|f) N(f|Fmu,cov) df}
         """
+        N = tf.shape(cov)[0]
+        M = tf.shape(cov)[2]
+        # get cholesky factor with size [M, N, N]
+        L = self.getCholeskyOf(tf.transpose(cov, [2,0,1]))
         # normal random vector with shape [num_samples, M, N, 1]
-        rndn = tf.random_normal(
-                    [self.num_samples, tf.shape(L)[2], tf.shape(L)[1], 1],
-                    dtype=tf.float64)
+        rndn = tf.random_normal( [self.num_samples, M, N, 1],dtype=tf.float64)
         # L.shape [num_samples, M, N, N]
-        L = tf.tile(tf.expand_dims(tf.transpose(L, [2,0,1]), [0]),
-                                    [self.num_samples, 1,1,1])
+        L = tf.tile(tf.expand_dims(L, [0]),[self.num_samples, 1,1,1])
         # Sampled point of F.
         # X.shape = [num_samples, N, M]. Mean: Fmu, Cov: LLt
         X = tf.tile(tf.expand_dims(Fmu, [0]), [self.num_samples, 1, 1]) + \
@@ -63,6 +66,17 @@ class TransformedLikelihood(Likelihood):
 
         return self.variational_expectations(tf.transpose(Gmu), tf.transpose(Gvar), Y)
 
+    def getCholeskyOf(self, cov):
+        """
+        :param tf.tensor cov: covariance matrix sized [M, N, N].
+        :return tf.tensor L:  Cholesky factor of cov, sized [M,N,N]
+
+        This method can be overwritten if there is faster method.
+        """
+        shape = tf.shape(cov)
+        I = tf.tile(tf.expand_dims(eye(shape[2]), [0]), [shape[0], 1,1])
+        return tf.batch_cholesky(cov + self.jitter*I)
+
     def logp_gpmc(self, X, Y):
         """
         A method that for the gpmc.
@@ -77,6 +91,10 @@ class TransformedLikelihood(Likelihood):
         return self.logp(G, Y)
 
     def transform_tensor(self, F):
+        """
+        This method is prepared for the child class, in particular,
+        MultilatentLikelihood
+        """
         return self.transform(F)
 
     def transform(self, F):
@@ -149,12 +167,12 @@ class Gaussian(TransformedLikelihood):
     i.i.d Gaussian with uniform variance.
     Stochastic expectation is used.
     """
-    def __init__(self, num_samples=20, exact=True):
+    def __init__(self, num_samples=20, exact=True, jitter=1.0e-6):
         """
         :param bool exact: If True then analytically calculate
                                             stochastic_expectations.
         """
-        TransformedLikelihood.__init__(self, num_samples)
+        TransformedLikelihood.__init__(self, num_samples, jitter)
         self.variance = Param(1.0, transforms.positive)
         self.exact = exact
 
@@ -164,20 +182,19 @@ class Gaussian(TransformedLikelihood):
     def logp(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
 
-    def stochastic_expectations(self, Fmu, L, Y):
+    def stochastic_expectations(self, Fmu, cov, Y):
         if self.exact: # exact calculation
-            L = tf.transpose(L, [2,0,1])
-            Fvar = tf.batch_matrix_diag_part(tf.batch_matmul(L, L, adj_y=True))
+            Fvar = tf.batch_matrix_diag_part(tf.transpose(cov, [2,0,1]))
             Fmu = tf.transpose(Fmu)
             Y = tf.transpose(Y)
             return -0.5 * np.log(2 * np.pi) - 0.5 * tf.log(self.variance) \
                    - 0.5 * (tf.square(Y - Fmu) + Fvar) / self.variance
         else:
-            return TransformedLikelihood.stochastic_expectations(self, Fmu, L, Y)
+            return TransformedLikelihood.stochastic_expectations(self, Fmu, cov, Y)
 
 class MinibatchGaussian(Gaussian):
-    def __init__(self, num_data, minibatch_size, num_samples=20):
-        Gaussian.__init__(self, num_samples, exact=False)
+    def __init__(self, num_data, minibatch_size, num_samples=20, exact=True, jitter=1.0e-6):
+        Gaussian.__init__(self, num_samples, exact, jitter)
         # transfer function
         self.I = MinibatchData(np.eye(num_data), minibatch_size)
 
@@ -185,6 +202,17 @@ class MinibatchGaussian(Gaussian):
         I = tf.tile(tf.expand_dims(self.I, [0]), [tf.shape(F)[0], 1, 1])
         return tf.batch_matmul(I, F)
 
+    def stochastic_expectations(self, Fmu, cov, Y):
+        if self.exact: # exact calculation
+            Fvar = tf.matmul(self.I,
+                    tf.transpose(
+                        tf.batch_matrix_diag_part(tf.transpose(cov, [2,0,1]))))
+            Fmu = tf.matmul(self.I, Fmu)
+
+            return -0.5 * np.log(2 * np.pi) - 0.5 * tf.log(self.variance) \
+                   - 0.5 * (tf.square(Y - Fmu) + Fvar) / self.variance
+        else:
+            return TransformedLikelihood.stochastic_expectations(self, Fmu, cov, Y)
 '''
 class NonLinearLikelihood(StochasticLikelihood):
     """

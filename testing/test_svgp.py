@@ -19,6 +19,28 @@ class test_vgp(unittest.TestCase):
         self.f_ref =   self.m_ref.predict_f(self.Xnew)
         tf.set_random_seed(1)
 
+    def test_svgp_nonexact_lik(self):
+        tf.set_random_seed(1)
+        minibatchGaussian = MinibatchGaussian(
+                            self.num_params, self.num_params, 40, exact=False)
+        m_stvgp = SVGP(self.X, self.Y,
+                    kern = GPflow.kernels.RBF(1),
+                    likelihood=minibatchGaussian,
+                    Z = self.X.copy())
+        m_stvgp.Z.fixed = True
+        m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=3000)
+        obj_stvgp = np.mean(
+                [m_stvgp._objective(m_stvgp.get_free_state())[0] for i in range(10)])
+        print(self.ref_objective)
+        print(obj_stvgp)
+        self.assertTrue(np.allclose(self.ref_objective, obj_stvgp, atol=2.))
+        self.assertTrue(np.allclose(self.m_ref.likelihood.variance.value,
+                                    m_stvgp.likelihood.variance.value, rtol=0.2))
+        f_stvgp=m_stvgp.predict_f(self.Xnew)
+        self.assertTrue(np.allclose(self.f_ref[0], f_stvgp[0], atol=0.2))
+        self.assertTrue(np.allclose(self.f_ref[1], f_stvgp[1], atol=0.2))
+
+
     def test_svgp_full(self):
         tf.set_random_seed(1)
         minibatchGaussian = MinibatchGaussian(self.num_params, self.num_params, 40)

@@ -47,13 +47,13 @@ class test_vgp(unittest.TestCase):
         tf.set_random_seed(1)
         m_stvgp = VGP(self.X, self.Y, kern = GPflow.kernels.RBF(1),
                     likelihood=Gaussian(40, exact=False), mode='mean_field')
-        m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.05), maxiter=500)
+        m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=500)
         obj_stvgp = np.mean(
                 [m_stvgp._objective(m_stvgp.get_free_state())[0] for i in range(10)])
         # needs rough agreement.
+        print(m_ref._objective(m_ref.get_free_state())[0],obj_stvgp)
         self.assertTrue(np.allclose(  m_ref._objective(m_ref.get_free_state())[0],
-                                    obj_stvgp,
-                                    atol=2.))
+                                    obj_stvgp, atol=2.))
 
         m_stvgp2 = VGP(self.X, self.Y, kern = GPflow.kernels.RBF(1),
                     likelihood=Gaussian(40, exact=False), mode='semi_diag',

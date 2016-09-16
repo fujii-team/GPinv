@@ -21,7 +21,6 @@ from GPflow.tf_wraps import eye
 from GPflow.model import GPModel
 from . import transforms
 from .param import DataHolder, Param, Parameterized, ParamList, MinibatchData
-from .multilatent_param import IndexedDataHolder, IndexedParamList, ConcatParamList, SqrtParamList
 from .kernels import BlockDiagonal
 from .mean_functions import Zero, SwitchedMeanFunction
 from .svgp import TransformedSVGP
@@ -33,9 +32,7 @@ class MultilatentSVGP(TransformedSVGP):
     SVGP for the transformed likelihood with multiple latent functions.
     """
     def __init__(self, model_input_set,
-                 Y, likelihood, num_latent=None,
-                 q_shape='fullrank',
-                 q_indices_list=None,
+                 Y, likelihood,
                  minibatch_size=None, random_seed=0):
         """
         - model_inputs: list of ModelInput objects.
@@ -59,7 +56,7 @@ class MultilatentSVGP(TransformedSVGP):
             minibatch_size = self.num_data
 
         # Construct input vector, kernel, and mean_functions from input_list
-        X = M(self.input_list)
+        X = self.model_input_set.getConcat_X()
         Y = MinibatchData(Y, minibatch_size, rng=np.random.RandomState(random_seed))
 
         kern          = self.model_input_set.getKernel()
@@ -70,22 +67,16 @@ class MultilatentSVGP(TransformedSVGP):
         slice_begin, slice_end = self.model_input_set.generate_X_slices()
         likelihood.make_slice_indices(slice_begin, slice_end)
 
-        self.Z_list = IndexedParamList(self.input_list)
+        self.Z_list = self.model_input_set.getConcat_Z()
         self.num_inducing = self.Z_list.shape[0]
 
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
 
         # init variational parameters
-        self.q_mu_list = ConcatParamList(self.input_list, self.num_latent)
-
-        if self.q_diag:
-            self.q_sqrt_list = ConcatParamList(self.input_list, self.num_latent,
-                    [np.ones((z.shape[0], self.num_latent)) for z in self.Z_list],
-                    transforms.positive)
-        else:
-            self.q_sqrt_list = SqrtParamList(self.input_list, self.num_latent,
-                                                        q_shape, q_indices_list)
+        self.q_mu_list = self.model_input_set.getConcat_q_mu()
+        self.q_sqrt_list = self.model_input_set.getConcat_q_sqrt()
+        self.q_diag = True if self.model_input_set.q_shape is 'diagonal' else False
 
     @property
     def Z(self):

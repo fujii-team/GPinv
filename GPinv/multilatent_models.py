@@ -11,7 +11,7 @@ class ModelInput(object):
     """
     def __init__(self, X, kern, Z=None, mean_function=Zero(),
                         X_minibatch_size=None, random_seed=0,
-                        q_mu = None, q_sqrt = None):
+                        q_mu = None, q_sqrt = None, num_latent=1):
         """
         :param 2d-np.array X: Expressive coordinate
         :param Kern kern: GPinv.Kern object
@@ -31,8 +31,9 @@ class ModelInput(object):
         self.mean_function = mean_function
         self.X_minibatch_size = X_minibatch_size or X.shape[0]
         self.random_seed = random_seed
-        # TODO maybe, default values should be specified
         self.q_mu = q_mu
+        if self.q_mu is None:         # Setting default values
+            self.q_mu = np.zeros((self.Z.shape[0], num_latent))
         self.q_sqrt = q_sqrt
 
 

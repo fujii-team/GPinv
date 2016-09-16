@@ -1,3 +1,4 @@
+from functools import reduce
 import tensorflow as tf
 import GPflow
 from GPflow.tf_wraps import eye

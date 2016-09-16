@@ -1,4 +1,5 @@
 import tensorflow as tf
+from functools import reduce
 from GPflow import mean_functions
 from GPflow.param import ParamList
 

@@ -117,6 +117,16 @@ class ConcatParamList(ParamList):
                                     for param, paddings
                                     in zip(self._list, self.paddings_list)])
 
+    @property
+    def shape(self):
+        """
+        Return the whole shape of the parameters
+        """
+        sh = [0,self._list[0].shape[1]]
+        for p in self._list:
+            sh[0] += p.shape[0]
+        return sh
+
 class SqrtParamList(ConcatParamList):
     """
     A list of Block matrix parameters, used for the Cholesky factor parameter.

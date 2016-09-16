@@ -3,7 +3,6 @@ import GPflow
 import GPinv
 from GPinv import transforms
 from GPinv.param import SemiDiag, MultiDiagL, SqrtParamList
-from GPinv.model_input import ModelInput
 import numpy as np
 import unittest
 

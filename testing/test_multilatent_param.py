@@ -57,6 +57,7 @@ class test_multilatent_param(unittest.TestCase):
             Z = m._session.run(tf.identity(m.concatParam.concat()), feed_dict = m.get_feed_dict())
         self.assertTrue(np.allclose(self.Z_concat, Z))
         self.assertTrue(np.allclose(self.Z_concat, m.concatParam.concat()))
+        self.assertTrue(np.allclose(m.concatParam.shape, self.Z_concat.shape))
 
     def test_ConcatParamList_InputSet(self):
         model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2), Z=self.Z1)

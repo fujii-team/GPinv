@@ -93,10 +93,8 @@ class TransformedSVGP(SVGP):
         # TODO Rank-two downgrade should be applied (if possible).
         jitter = tf.tile(tf.expand_dims(eye(tf.shape(self.X)[0]), [0]),
                         [self.num_latent, 1,1]) * 1.0e-6
-        Lcov = tf.transpose(
-                    tf.batch_cholesky(tf.transpose(fcov, [2,0,1]) + jitter), [1,2,0])
         # Get variational expectations.
-        var_exp = self.likelihood.stochastic_expectations(fmean, Lcov, self.Y)
+        var_exp = self.likelihood.stochastic_expectations(fmean, fcov, self.Y)
         # re-scale for minibatch size
         scale = tf.cast(self.num_data, tf.float64) / tf.cast(tf.shape(self.Y)[0], tf.float64)
         return tf.reduce_sum(var_exp) * scale - KL

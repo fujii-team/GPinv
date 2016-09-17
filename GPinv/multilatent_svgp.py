@@ -24,7 +24,7 @@ from .param import DataHolder, Param, Parameterized, ParamList, MinibatchData
 from .kernels import BlockDiagonal
 from .mean_functions import Zero, SwitchedMeanFunction
 from .svgp import TransformedSVGP
-from .likelihoods import MultilatentLikelihood
+from .multilatent_likelihoods import MultilatentLikelihood
 
 
 class MultilatentSVGP(TransformedSVGP):

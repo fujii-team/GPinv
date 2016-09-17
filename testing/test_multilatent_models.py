@@ -9,7 +9,8 @@ from GPinv.multilatent_models import ModelInput, ModelInputSet
 from GPinv.multilatent_gpmc import MultilatentGPMC
 from GPinv.multilatent_svgp import MultilatentSVGP
 from GPinv.nonlinear_model import SVGP
-from GPinv.likelihoods import MultilatentLikelihood, Gaussian, MinibatchGaussian
+from GPinv.likelihoods import Gaussian, MinibatchGaussian
+from GPinv.multilatent_likelihoods import MultilatentLikelihood
 import GPinv
 
 class SingleGaussian(MultilatentLikelihood):
@@ -32,6 +33,10 @@ class DoubleLikelihood(MultilatentLikelihood):
     def __init__(self, num_samples=20):
         MultilatentLikelihood.__init__(self, num_samples)
         self.variance = Param(1., transforms.positive)
+
+    def getCholeskyOf(self, cov):
+        var = tf.batch_matrix_diag(tf.batch_matrix_diag_part(cov))
+        return tf.sqrt(var)
 
     def transform(self, F_list):
         return F_list[0] + F_list[1]

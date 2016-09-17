@@ -7,7 +7,7 @@ from GPflow.model import GPModel
 from .param import Param, DataHolder
 from .gpmc import TransformedGPMC
 from .mean_functions import Zero
-from .likelihoods import MultilatentLikelihood
+from .multilatent_likelihoods import MultilatentLikelihood
 
 class MultilatentGPMC(TransformedGPMC):
     """

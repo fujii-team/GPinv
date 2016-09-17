@@ -4,6 +4,7 @@ import numpy as np
 import unittest
 from GPinv.nonlinear_model import SVGP
 from GPinv.likelihoods import Gaussian, MinibatchGaussian
+from GPflow.param import DataHolder
 
 class test_vgp(unittest.TestCase):
     def setUp(self):
@@ -26,7 +27,8 @@ class test_vgp(unittest.TestCase):
         m_stvgp = SVGP(self.X, self.Y,
                     kern = GPflow.kernels.RBF(1),
                     likelihood=minibatchGaussian,
-                    Z = self.X.copy())
+                    Z = self.X.copy(),
+                    minibatch_size=self.num_params)
         m_stvgp.Z.fixed = True
         m_stvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=3000)
         obj_stvgp = np.mean(
@@ -43,7 +45,7 @@ class test_vgp(unittest.TestCase):
 
     def test_svgp_full(self):
         tf.set_random_seed(1)
-        minibatchGaussian = MinibatchGaussian(self.num_params, self.num_params, 40)
+        minibatchGaussian = MinibatchGaussian(self.num_params)
         m_stvgp = SVGP(self.X, self.Y,
                     kern = GPflow.kernels.RBF(1),
                     likelihood=minibatchGaussian,
@@ -105,6 +107,19 @@ class test_vgp(unittest.TestCase):
         # print(f_stvgp2[0][:,0]-self.f_ref[0][:,0])
         self.assertTrue(np.allclose(self.f_ref[0], f_stvgp2[0], atol=0.2))
         self.assertTrue(np.allclose(self.f_ref[1], f_stvgp2[1], atol=0.2))
+
+    def test_Y_minibatch_off(self):
+        # If minibatch_size is None, Y should be treated just as DataHolder
+        tf.set_random_seed(1)
+        inducing = 15
+        minibatch_size = 20
+        m_stvgp2 = SVGP(self.X, self.Y,
+                    kern = GPflow.kernels.RBF(1),
+                    likelihood=Gaussian(),
+                    Z = np.linspace(0.5,5.5,inducing).reshape(-1,1),
+                    minibatch_size=minibatch_size,
+                    X_minibatch=True)
+        self.assertTrue(isinstance(m_stvgp2.Y, DataHolder))
 
     def test_X_minibatch(self):
         tf.set_random_seed(1)

@@ -55,8 +55,16 @@ class test_multilatent_param(unittest.TestCase):
         m.make_tf_array(m.get_free_state())
         with m.tf_mode():
             Z = m._session.run(tf.identity(m.concatParam.concat()), feed_dict = m.get_feed_dict())
-        self.assertTrue(np.allclose(self.Z_concat, Z))
         self.assertTrue(np.allclose(self.Z_concat, m.concatParam.concat()))
+        self.assertTrue(np.allclose(self.Z_concat, Z))
+        self.assertTrue(np.allclose(m.concatParam.shape, self.Z_concat.shape))
+
+        # fix test
+        m.concatParam.fixed=True
+        with m.tf_mode():
+            Z = m._session.run(tf.identity(m.concatParam.concat()), feed_dict = m.get_feed_dict())
+        self.assertTrue(np.allclose(m.concatParam.shape, self.Z_concat.shape))
+        self.assertTrue(np.allclose(self.Z_concat, Z))
         self.assertTrue(np.allclose(m.concatParam.shape, self.Z_concat.shape))
 
     def test_ConcatParamList_InputSet(self):
@@ -70,6 +78,13 @@ class test_multilatent_param(unittest.TestCase):
             Z = m._session.run(tf.identity(m.concatParam.concat()), feed_dict = m.get_feed_dict())
         self.assertTrue(np.allclose(self.Z_concat, Z))
         self.assertTrue(np.allclose(self.Z_concat, m.concatParam.concat()))
+        # fix test
+        m.concatParam.fixed=True
+        with m.tf_mode():
+            Z = m._session.run(tf.identity(m.concatParam.concat()), feed_dict = m.get_feed_dict())
+        self.assertTrue(np.allclose(m.concatParam.shape, self.Z_concat.shape))
+        self.assertTrue(np.allclose(self.Z_concat, Z))
+        self.assertTrue(np.allclose(m.concatParam.shape, self.Z_concat.shape))
 
     def test_ConcatParamList_InputSetDefault(self):
         model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2))

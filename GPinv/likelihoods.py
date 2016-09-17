@@ -193,10 +193,13 @@ class Gaussian(TransformedLikelihood):
             return TransformedLikelihood.stochastic_expectations(self, Fmu, cov, Y)
 
 class MinibatchGaussian(Gaussian):
-    def __init__(self, num_data, minibatch_size, num_samples=20, exact=True, jitter=1.0e-6):
+    def __init__(self, num_data, minibatch_size=None, num_samples=20, exact=True, jitter=1.0e-6):
         Gaussian.__init__(self, num_samples, exact, jitter)
         # transfer function
-        self.I = MinibatchData(np.eye(num_data), minibatch_size)
+        if minibatch_size is None:
+            self.I = DataHolder(np.eye(num_data))
+        else:
+            self.I = MinibatchData(np.eye(num_data), minibatch_size)
 
     def transform(self, F):
         I = tf.tile(tf.expand_dims(self.I, [0]), [tf.shape(F)[0], 1, 1])

@@ -42,16 +42,18 @@ class TransformedSVGP(SVGP):
         - whiten is a boolean. If True, we use the whitened representation of
           the inducing points.
         """
-        # sort out the X, Y into MiniBatch objects.
+        self.num_data = Y.shape[0]
+        # if minibatch_size is None, Y is treated just as DataHolder
         if minibatch_size is None:
             minibatch_size = Y.shape[0]
-        self.num_data = Y.shape[0]
+            Y = DataHolder(Y)
+        else:
+            Y = MinibatchData(Y, minibatch_size)
 
         if X_minibatch:
             X = MinibatchData(X, minibatch_size)
         else:
             X = DataHolder(X)
-        Y = MinibatchData(Y, minibatch_size)
 
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)

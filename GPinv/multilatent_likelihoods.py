@@ -81,7 +81,6 @@ class MultilatentIndependent(MultilatentLikelihood):
         # shape [M, N, n, n]
         return tf.transpose(diag_cov, [0, 3, 1, 2])
 
-
     def getCholeskyOf(self, cov):
         """
         :param tf.tensor cov: size [M, Nxn, Nxn], where M beging number of

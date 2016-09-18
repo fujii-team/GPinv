@@ -140,13 +140,13 @@ class ModelInputSet(object):
         make slice_X_begin and slice_X_size
         """
         # slice index used for the K(X) computing
-        slice_X_begin,  slice_X_size  = [], []
-        num_X_i = 0
+        slice_Z_begin,  slice_Z_size  = [], []
+        num_Z_i = 0
         for d in self.input_list:
-            slice_X_begin.append(num_X_i)
-            slice_X_size.append(d.Z.shape[0])
-            num_X_i += d.Z.shape[0]
-        return slice_X_begin, slice_X_size
+            slice_Z_begin.append(num_Z_i)
+            slice_Z_size.append(d.Z.shape[0])
+            num_Z_i += d.Z.shape[0]
+        return slice_Z_begin, slice_Z_size
 
 
     def getKernel(self, jitter=None):
@@ -179,7 +179,7 @@ class ModelInputSet(object):
                     q_sqrt = np.array([np.eye(self.input_list[indices[0]].Z.shape[0])
                            for _ in range(self.num_latent)]).swapaxes(0, 2)
                 # non-diagonal block
-                elif indices[0] >= indices[1]:
+                elif indices[0] > indices[1]:
                     # TODO add float_type support
                     q_sqrt = np.zeros((self.input_list[indices[0]].Z.shape[0],
                                        self.input_list[indices[1]].Z.shape[0],

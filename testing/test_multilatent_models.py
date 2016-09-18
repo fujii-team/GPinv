@@ -3,6 +3,7 @@ import tensorflow as tf
 import numpy as np
 import unittest
 from GPflow import gpr
+from GPflow import conditionals
 from GPinv import kernels, densities, transforms
 from GPinv.param import Param
 from GPinv.multilatent_models import ModelInput, ModelInputSet
@@ -10,7 +11,7 @@ from GPinv.multilatent_gpmc import MultilatentGPMC
 from GPinv.multilatent_svgp import MultilatentSVGP
 from GPinv.nonlinear_model import SVGP
 from GPinv.likelihoods import Gaussian, MinibatchGaussian
-from GPinv.multilatent_likelihoods import MultilatentLikelihood
+from GPinv.multilatent_likelihoods import MultilatentLikelihood, MultilatentIndependent
 import GPinv
 
 class SingleGaussian(MultilatentLikelihood):
@@ -29,20 +30,17 @@ class SingleGaussian(MultilatentLikelihood):
         return densities.gaussian(F, Y, self.variance)
 
 
-class DoubleLikelihood(MultilatentLikelihood):
+class DoubleLikelihood(MultilatentIndependent):
     def __init__(self, num_samples=20):
-        MultilatentLikelihood.__init__(self, num_samples)
+        MultilatentIndependent.__init__(self, num_samples)
         self.variance = Param(1., transforms.positive)
-
-    def getCholeskyOf(self, cov):
-        var = tf.batch_matrix_diag(tf.batch_matrix_diag_part(cov))
-        return tf.sqrt(var)
 
     def transform(self, F_list):
         return F_list[0] + F_list[1]
 
     def logp(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
+
 
 class test_single(unittest.TestCase):
     """
@@ -51,7 +49,7 @@ class test_single(unittest.TestCase):
     """
     def setUp(self):
         rng = np.random.RandomState(0)
-        self.num_params = 40
+        self.num_params = 20
         self.X = np.linspace(0, 6., self.num_params).reshape(-1,1)
         self.Y = 2.*np.sin(self.X) + rng.randn(self.num_params).reshape(-1,1) * 0.3
         # reference GPR
@@ -78,9 +76,8 @@ class test_single(unittest.TestCase):
                                     self.m_ref.likelihood.variance.value,
                                             rtol=0.2))
 
-    def test_1svgp(self):
+    def test_svgp(self):
         # in this test, MultilatentSVGP should work as a simple svgp.
-        minibatch_size=30
         model_input1 = ModelInput(self.X, kernels.RBF(1))
         model_input_set = ModelInputSet([model_input1],
                                         q_shape='fullrank')
@@ -103,6 +100,45 @@ class test_single(unittest.TestCase):
         self.assertTrue(np.allclose(
             self.m_ref.likelihood.variance.value, m_mlvgp.likelihood.variance.value,
             rtol = 0.2))
+
+    def test_svgp_inducing(self):
+        # in this test, MultilatentSVGP should work as a simple svgp.
+        model_input1 = ModelInput(self.X, kernels.RBF(1),
+                            Z=np.linspace(0.0,6.,3).reshape(-1,1))
+        model_input_set = ModelInputSet([model_input1],
+                                        q_shape='fullrank')
+        # define the model
+        m_mlvgp = MultilatentSVGP(model_input_set, self.Y,
+                            likelihood=SingleGaussian(num_samples=40))
+        m_mlvgp._compile()
+        with m_mlvgp.tf_mode():
+            fmean, fvar = m_mlvgp._session.run(
+                        conditionals.conditional(m_mlvgp.X, m_mlvgp.Z, m_mlvgp.kern, m_mlvgp.q_mu,
+                                           q_sqrt=None, full_cov=False, whiten=True),
+                        feed_dict=m_mlvgp.get_feed_dict())
+        print(fmean)
+        print(fvar)
+        m_mlvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=1)
+        print(self.m_ref._objective(self.m_ref.get_free_state())[0],
+                m_mlvgp._objective(m_mlvgp.get_free_state())[0])
+        print(self.m_ref.kern)
+        print(m_mlvgp.kern)
+        print(self.m_ref.likelihood)
+        print(m_mlvgp.likelihood)
+        self.assertTrue(np.allclose(
+            self.m_ref._objective(self.m_ref.get_free_state())[0],
+            m_mlvgp._objective(m_mlvgp.get_free_state())[0],
+            atol = 2.))
+        self.assertTrue(np.allclose(
+            self.m_ref.kern.lengthscales.value, m_mlvgp.kern.kern_list[0].lengthscales.value,
+            rtol = 0.2))
+        self.assertTrue(np.allclose(
+            self.m_ref.kern.variance.value, m_mlvgp.kern.kern_list[0].variance.value,
+            rtol = 0.2))
+        self.assertTrue(np.allclose(
+            self.m_ref.likelihood.variance.value, m_mlvgp.likelihood.variance.value,
+            rtol = 0.2))
+
 
 class test_double(unittest.TestCase):
     """
@@ -152,7 +188,7 @@ class test_double(unittest.TestCase):
                                     self.m_ref.likelihood.variance.value,
                                             rtol=0.2))
 
-    def _test_1svgp(self):
+    def _test_svgp(self):
         minibatch_size=30
         rbf = kernels.RBF(1)
         rbf.lengthscales = 0.3

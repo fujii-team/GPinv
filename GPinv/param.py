@@ -23,9 +23,7 @@ class ParamList(param.ParamList):
     pass
 
 #---------------- Objects used in multilatent model -----------
-
-
-class ConcatDataHolder(DataHolder):
+class ConcatDataHolder(Parameterized):
     """
     A DataHolder for the multiple-latent model input.
     We extend dimension of X where the last dimension shows the data index.
@@ -38,43 +36,48 @@ class ConcatDataHolder(DataHolder):
         - random_seeds: list of integer that is used for the random seed used
                         for the minibatching-operation.
         """
-        DataHolder.__init__(self, np.zeros((1,1)))
-        self.data_holders = []
+        Parameterized.__init__(self)
+        self.data_holder_list = []
+        begin = 0
+        self.slice_begin = []
         for X, minibatch_size, seed in zip(Xlist, minibatch_sizes, random_seeds):
-            index = 1.0*len(self.data_holders)
+            self.slice_begin.append(begin)
             if minibatch_size:
-                self.data_holders.append(
+                self.data_holder_list.append(
                     MinibatchData(X, minibatch_size=minibatch_size,
                                 rng=np.random.RandomState(seed)))
+                begin += minibatch_size
             else:
-                self.data_holders.append(
+                self.data_holder_list.append(
                     DataHolder(X, on_shape_change='recompile'))
+                begin += X.shape[0]
+        self.shape = [begin, Xlist[0].shape[1]]
 
     def __getitem__(self, index):
-        # Returns the data part of the array
-        return self.data_holders[index].value
+        if self._tf_mode: # Returns the data part of the array
+            return self.data_holder_list[index]._tf_array
+        else:             # Returns the data part of the array
+            return self.data_holder_list[index].value
 
     def __setitem__(self, index, item):
-        # Set the data and attach the additional index
-        self.data_holders[index].set_data(item)
+        # Set the data and attach the additional index. This
+        self.data_holder_list[index].set_data(item)
 
     def concat(self):
         """
         Returns the concat vector.
         """
-        return np.vstack([d._array for d in self.data_holders])
+        if self._tf_mode:
+            return tf.concat(0, [d._tf_array for d in self.data_holder_list])
+        else:
+            return np.vstack([d.value for d in self.data_holder_list])
 
     def get_feed_dict(self):
         # returns all the data
-        return {self._tf_array: self.concat()}
-
-    @property
-    def shape(self):
-        shape0, shape1=0,0
-        for d in self.data_holders:
-            shape0 += d.shape[0]
-            shape1 = max(shape1, d.shape[1])
-        return [shape0, shape1]
+        feed_dict = {}
+        for d in self.data_holder_list:
+            feed_dict.update(d.get_feed_dict())
+        return feed_dict
 
 
 class ConcatParamList(ParamList):
@@ -90,17 +93,14 @@ class ConcatParamList(ParamList):
         - num_latent: integer, indicating number of latent function M.
         - value_list: list of initial values
         """
-        # number of all Z
-        num_p = np.sum([p.shape[0] for p in p_list])
         # list of Param object
         param_list = []
-        self.paddings_list = []
-        num_p_i = 0
+        self.slice_begin = []
+        begin = 0
         for p in p_list:
             param_list.append(Param(p, transform))
-            self.paddings_list.append(
-                        [[num_p_i, num_p - num_p_i - p.shape[0]], [0,0]])
-            num_p_i += p.shape[0]
+            self.slice_begin.append(begin)
+            begin += p.shape[0]
         # remember to call the parent's initializer
         ParamList.__init__(self, param_list)
 
@@ -109,13 +109,9 @@ class ConcatParamList(ParamList):
         Return q_sqrt matrix for whole the coordinates.
         """
         if self._tf_mode:
-            return reduce(tf.add, [tf.pad(param._tf_array, paddings)
-                                    for param, paddings
-                                    in zip(self._list, self.paddings_list)])
+            return tf.concat(0, [p._tf_array for p in self._list])
         else: # return np
-            return reduce(np.add, [np.pad(param.value, paddings, mode='constant')
-                                    for param, paddings
-                                    in zip(self._list, self.paddings_list)])
+            return np.vstack([p.value for p in self._list])
 
     @property
     def shape(self):
@@ -126,6 +122,7 @@ class ConcatParamList(ParamList):
         for p in self._list:
             sh[0] += p.shape[0]
         return sh
+
 
 class SqrtParamList(ConcatParamList):
     """
@@ -153,6 +150,18 @@ class SqrtParamList(ConcatParamList):
         # remember to call the parent's initializer
         ParamList.__init__(self, param_list)
 
+    def concat(self):
+        """
+        Return q_sqrt matrix for whole the coordinates.
+        """
+        if self._tf_mode:
+            return reduce(tf.add, [tf.pad(param._tf_array, paddings)
+                                    for param, paddings
+                                    in zip(self._list, self.paddings_list)])
+        else: # return np
+            return reduce(np.add, [np.pad(param.value, paddings, mode='constant')
+                                    for param, paddings
+                                    in zip(self._list, self.paddings_list)])
 
 
 #TODO should be deprecated?

@@ -38,9 +38,12 @@ class test_multilatent_param(unittest.TestCase):
         m = GPflow.model.Model()
         m.concatData = input_set.getConcat_X()
         with m.tf_mode():
-            X = m._session.run(tf.identity(m.concatData), feed_dict = m.get_feed_dict())
-
+            X = m._session.run(tf.identity(m.concatData.concat()), feed_dict = m.get_feed_dict())
+            X1 = m._session.run(tf.identity(m.concatData[0]), feed_dict = m.get_feed_dict())
+            X2 = m._session.run(tf.identity(m.concatData[1]), feed_dict = m.get_feed_dict())
         self.assertTrue(np.allclose(self.X_concat, X))
+        self.assertTrue(np.allclose(self.X1, X1))
+        self.assertTrue(np.allclose(self.X2, X2))
         # test getitem
         self.assertTrue(np.allclose(self.X_concat, m.concatData.concat()))
         # test setitem
@@ -58,7 +61,6 @@ class test_multilatent_param(unittest.TestCase):
         self.assertTrue(np.allclose(self.Z_concat, m.concatParam.concat()))
         self.assertTrue(np.allclose(self.Z_concat, Z))
         self.assertTrue(np.allclose(m.concatParam.shape, self.Z_concat.shape))
-
         # fix test
         m.concatParam.fixed=True
         with m.tf_mode():

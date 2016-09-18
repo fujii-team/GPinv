@@ -88,46 +88,38 @@ class Coregion(GPflow.kernels.Coregion):
 #---------------- Kernels for the multilatent model ------------------
 class BlockDiagonal(GPflow.kernels.Kern):
     """
-    Block-wise kernel.
-    The selection of the block is made by the extra dimension of X.
+    The blockdiagonal kernel the element-matrix in which is given by kern_list
+    ! NOTE !
+    This kernel accepts param.ConcatParamList or param.ConcatDataHolder as
+    arguments, rather than tf.tensor.
     """
-    def __init__(self, kern_list,
-                        slice_X_begin, slice_X_size,
-                        slice_X2_begin, slice_X2_size, jitter=0.):
-        """
-        - kern_list : list of Kernels.
-        """
+    def __init__(self, kern_list, jitter=1.0e-4):
         GPflow.kernels.Kern.__init__(self, 1, 1)
         self.kern_list = ParamList(kern_list)
-        # set the slice indices
-        self.slice_X_begin, self.slice_X_size = slice_X_begin, slice_X_size
-        self.slice_X2_begin, self.slice_X2_size = slice_X2_begin, slice_X2_size
-        self.jitter = jitter
+        self.jitter=jitter
 
     def K(self, X, X2=None):
+        """
+        :X and X2 ConcatParamList or ConcatDataHolder: expressive variable for K
+        """
         if X2 is None:
             return reduce(tf.add,
-                [tf.pad(k.K(tf.slice(X, [begin,0], [size, -1])),
-                        [[begin,tf.shape(X)[0]-begin-size],
-                         [begin,tf.shape(X)[0]-begin-size]])
-                    for k,begin,size
-                    in zip(self.kern_list, self.slice_X_begin, self.slice_X_size)])
+                [tf.pad(k.K(x), [[begin, X.shape[0]-begin-tf.shape(x)[0]],
+                                 [begin, X.shape[0]-begin-tf.shape(x)[0]]])
+                    for k,x,begin
+                    in zip(self.kern_list, X, X.slice_begin)])
         else:
             return reduce(tf.add,
-                [tf.pad(k.K(tf.slice(X, [begin,0], [size, -1]),
-                            tf.slice(X2,[begin2,0],[size2,-1])),
-                        [[begin,tf.shape(X)[0]-begin-size],
-                         [begin2,tf.shape(X2)[0]-begin2-size2]])
-                    for k,begin,size,begin2,size2
-                    in zip(self.kern_list, self.slice_X_begin, self.slice_X_size,
-                                           self.slice_X2_begin,self.slice_X2_size)])
+                [tf.pad(k.K(x,x2 ), [[begin, X.shape[0] -begin -tf.shape(x)[0]],
+                                     [begin2,X2.shape[0]-begin2-tf.shape(x2)[0]]])
+                    for k,x,begin,x2,begin2
+                    in zip(self.kern_list, X, X.slice_begin,X2,X2.slice_begin)])
 
     def Kdiag(self, X):
         return reduce(tf.add,
-            [tf.pad(k.Kdiag(tf.slice(X, [begin,0], [size, -1])),
-                    [[begin,tf.shape(X)[0]-begin-size]])
-                for k,begin,size
-                in zip(self.kern_list, self.slice_X_begin, self.slice_X_size)])
+            [tf.pad(k.Kdiag(x), [[begin,X.shape[0]-begin-tf.shape(x)[0]]])
+                for k,x,begin
+                in zip(self.kern_list, X, X.slice_begin)])
 
     def Cholesky(self, X):
         """
@@ -136,9 +128,9 @@ class BlockDiagonal(GPflow.kernels.Kern):
         """
         return reduce(tf.add,
             [tf.pad(
-                tf.cholesky(k.K(tf.slice(X, [begin,0], [size, -1])) + self.jitter*eye(size)),
-                    [[begin,tf.shape(X)[0]-begin-size],
-                     [begin,tf.shape(X)[0]-begin-size]])
-                for k,begin,size
-                in zip(self.kern_list, self.slice_X_begin, self.slice_X_size)]
+                tf.cholesky(k.K(x) + self.jitter*eye(tf.shape(x)[0])),
+                    [[begin,X.shape[0]-begin-tf.shape(x)[0]],
+                     [begin,X.shape[0]-begin-tf.shape(x)[0]]])
+                for k,x,begin
+                in zip(self.kern_list, X, X.slice_begin)]
             )

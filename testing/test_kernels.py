@@ -156,10 +156,10 @@ class test_block_diagonal(unittest.TestCase):
         sess = tf.Session()
         sess.run(tf.initialize_all_variables())
         with m.tf_mode():
-            Kxx  = sess.run(m.kern.K(m.Z.concat()), feed_dict = m.get_feed_dict())
-            Kxx2 = sess.run(m.kern.K(m.Z.concat(), m.X), feed_dict = m.get_feed_dict())
-            Kdiag = sess.run(m.kern.Kdiag(m.Z.concat()), feed_dict = m.get_feed_dict())
-            cholesky = sess.run(m.kern.Cholesky(m.Z.concat()), feed_dict = m.get_feed_dict())
+            Kxx  = sess.run(m.kern.K(m.Z), feed_dict = m.get_feed_dict())
+            Kxx2 = sess.run(m.kern.K(m.Z, m.X), feed_dict = m.get_feed_dict())
+            Kdiag = sess.run(m.kern.Kdiag(m.Z), feed_dict = m.get_feed_dict())
+            cholesky = sess.run(m.kern.Cholesky(m.Z), feed_dict = m.get_feed_dict())
         # reference kernel
         kern_ref = ref_rbf(m.kern.kern_list[0])
         # Kxx

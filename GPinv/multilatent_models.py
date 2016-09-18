@@ -29,7 +29,7 @@ class ModelInput(object):
         else:
             self.Z = Z
         self.mean_function = mean_function
-        self.X_minibatch_size = X_minibatch_size or X.shape[0]
+        self.X_minibatch_size = X_minibatch_size
         self.random_seed = random_seed
         self.q_mu = q_mu
         if self.q_mu is None:         # Setting default values
@@ -43,7 +43,7 @@ class ModelInputSet(object):
     """
     def __init__(self, input_list, num_latent = 1,
         q_shape = None,
-        q_indices_list = None, q_sqrt_list=None, jitter=0.
+        q_indices_list = None, q_sqrt_list=None, jitter=1.e-6 
     ):
         """
         - input_list: List of the ModelInput.
@@ -127,14 +127,19 @@ class ModelInputSet(object):
         make slice_X_begin and slice_X_size
         """
         # slice index used for the K(X) computing
-        slice_X_begin,  slice_X_size  = [], []
-        num_X_i = 0
+        slice_begin,  slice_size  = [], []
+        begin = 0
         for d in self.input_list:
-            slice_X_begin.append(num_X_i)
-            slice_X_size.append(d.X_minibatch_size)
-            num_X_i += d.X_minibatch_size
-        return slice_X_begin, slice_X_size
+            slice_begin.append(begin)
+            if d.X_minibatch_size is None: # without X-minibatching
+                size = d.X.shape[0]
+            else:
+                size = d.X_minibatch_size
+            begin += size
+            slice_size.append(size)
 
+        return slice_begin, slice_size
+    '''
     def generate_Z_slices(self):
         """
         make slice_X_begin and slice_X_size
@@ -147,24 +152,17 @@ class ModelInputSet(object):
             slice_Z_size.append(d.Z.shape[0])
             num_Z_i += d.Z.shape[0]
         return slice_Z_begin, slice_Z_size
-
+    '''
 
     def getKernel(self, jitter=None):
         # slice index used for the K(X,X2) computing
         if jitter is None:
             jitter = self.jitter
-        slice_X, size_X = self.generate_Z_slices()
-        slice_X2,size_X2= self.generate_X_slices()
-        kern = BlockDiagonal([d.kern for d in self.input_list],
-                                slice_X,  size_X,
-                                slice_X2, size_X2, jitter)
+        kern = BlockDiagonal([d.kern for d in self.input_list],jitter)
         return kern
 
     def getMeanFunction(self):
-        # slice index used for the K(X) computing
-        slice_X,size_X= self.generate_X_slices()
-        return SwitchedMeanFunction([d.mean_function for d in self.input_list],
-                            slice_X, size_X)
+        return SwitchedMeanFunction([d.mean_function for d in self.input_list])
 
     def generateDefault_qsqrt(self):
         """

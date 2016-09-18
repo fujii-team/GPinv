@@ -3,7 +3,7 @@ import tensorflow as tf
 import numpy as np
 import unittest
 from GPflow import gpr
-from GPflow import conditionals
+from GPinv.multilatent_conditionals import conditional
 from GPinv import kernels, densities, transforms
 from GPinv.param import Param
 from GPinv.multilatent_models import ModelInput, ModelInputSet
@@ -84,8 +84,7 @@ class test_single(unittest.TestCase):
         # define the model
         m_mlvgp = MultilatentSVGP(model_input_set, self.Y,
                             likelihood=SingleGaussian(num_samples=40))
-        m_mlvgp.Z_list.fixed = True
-
+        m_mlvgp.Z.fixed = True
         m_mlvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=2000)
         self.assertTrue(np.allclose(
             self.m_ref._objective(self.m_ref.get_free_state())[0],
@@ -104,27 +103,19 @@ class test_single(unittest.TestCase):
     def test_svgp_inducing(self):
         # in this test, MultilatentSVGP should work as a simple svgp.
         model_input1 = ModelInput(self.X, kernels.RBF(1),
-                            Z=np.linspace(0.0,6.,3).reshape(-1,1))
+                            Z=np.linspace(0.0,6.,10).reshape(-1,1))
         model_input_set = ModelInputSet([model_input1],
                                         q_shape='fullrank')
         # define the model
         m_mlvgp = MultilatentSVGP(model_input_set, self.Y,
                             likelihood=SingleGaussian(num_samples=40))
-        m_mlvgp._compile()
-        with m_mlvgp.tf_mode():
-            fmean, fvar = m_mlvgp._session.run(
-                        conditionals.conditional(m_mlvgp.X, m_mlvgp.Z, m_mlvgp.kern, m_mlvgp.q_mu,
-                                           q_sqrt=None, full_cov=False, whiten=True),
-                        feed_dict=m_mlvgp.get_feed_dict())
-        print(fmean)
-        print(fvar)
-        m_mlvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=1)
-        print(self.m_ref._objective(self.m_ref.get_free_state())[0],
-                m_mlvgp._objective(m_mlvgp.get_free_state())[0])
-        print(self.m_ref.kern)
-        print(m_mlvgp.kern)
-        print(self.m_ref.likelihood)
-        print(m_mlvgp.likelihood)
+        m_mlvgp.optimize(tf.train.AdamOptimizer(learning_rate=0.02), maxiter=1000)
+        #print(self.m_ref._objective(self.m_ref.get_free_state())[0],
+        #        m_mlvgp._objective(m_mlvgp.get_free_state())[0])
+        #print(self.m_ref.kern)
+        #print(m_mlvgp.kern)
+        #print(self.m_ref.likelihood)
+        #print(m_mlvgp.likelihood)
         self.assertTrue(np.allclose(
             self.m_ref._objective(self.m_ref.get_free_state())[0],
             m_mlvgp._objective(m_mlvgp.get_free_state())[0],

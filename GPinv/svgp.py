@@ -58,7 +58,7 @@ class TransformedSVGP(SVGP):
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
         self.q_diag, self.whiten = q_diag, whiten
-        self.Z_param = Param(Z)
+        self.Z = Param(Z)
         self.num_latent = num_latent or Y.shape[1]
         self.num_inducing = Z.shape[0]
 
@@ -71,10 +71,6 @@ class TransformedSVGP(SVGP):
             q_sqrt = np.array([np.eye(self.num_inducing)
                                for _ in range(self.num_latent)]).swapaxes(0, 2)
             self.q_sqrt_param = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform)
-
-    @property
-    def Z(self):
-        return self.Z_param
 
     @property
     def q_mu(self):
@@ -92,9 +88,6 @@ class TransformedSVGP(SVGP):
         KL = self.build_prior_KL()
         # Get conditionals
         fmean, fcov = self.build_predict(self.X, full_cov=True)
-        # TODO Rank-two downgrade should be applied (if possible).
-        jitter = tf.tile(tf.expand_dims(eye(tf.shape(self.X)[0]), [0]),
-                        [self.num_latent, 1,1]) * 1.0e-6
         # Get variational expectations.
         var_exp = self.likelihood.stochastic_expectations(fmean, fcov, self.Y)
         # re-scale for minibatch size

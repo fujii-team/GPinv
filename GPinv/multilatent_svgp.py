@@ -25,7 +25,7 @@ from .kernels import BlockDiagonal
 from .mean_functions import Zero, SwitchedMeanFunction
 from .svgp import TransformedSVGP
 from .multilatent_likelihoods import MultilatentLikelihood
-
+from .multilatent_conditionals import conditional
 
 class MultilatentSVGP(TransformedSVGP):
     """
@@ -69,8 +69,8 @@ class MultilatentSVGP(TransformedSVGP):
         slice_begin, slice_end = self.model_input_set.generate_X_slices()
         likelihood.make_slice_indices(slice_begin, slice_end)
 
-        self.Z_list = self.model_input_set.getConcat_Z()
-        self.num_inducing = self.Z_list.shape[0]
+        self.Z = self.model_input_set.getConcat_Z()
+        self.num_inducing = self.Z.shape[0]
 
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
@@ -81,11 +81,13 @@ class MultilatentSVGP(TransformedSVGP):
         self.q_diag = True if self.model_input_set.q_shape is 'diagonal' else False
 
     @property
-    def Z(self):
-        return self.Z_list.concat()
-    @property
     def q_mu(self):
         return self.q_mu_list.concat()
     @property
     def q_sqrt(self):
         return self.q_sqrt_list.concat()
+
+    def build_predict(self, Xnew, full_cov=False):
+        mu, var = conditional(Xnew, self.Z, self.kern, self.q_mu,
+                                           q_sqrt=self.q_sqrt, full_cov=full_cov, whiten=self.whiten)
+        return mu + self.mean_function(Xnew), var

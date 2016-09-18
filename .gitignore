@@ -68,5 +68,8 @@ target/
 # Ipython just for testing
 archive_notebooks
 
+# svg files
+*.svg
+
 # memo for codeship setting
 codeship_settings.txt

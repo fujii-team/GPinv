@@ -5,7 +5,7 @@ import GPflow
 
 def make_LosMatrix(r,z):
     """
-    Constructing a matrix for a cylindrical plasma coordinate.
+    Construct a matrix for a cylindrical plasma coordinate.
     A[i,j] element stores a passing length for a shell j by chord i.
 
     r: radius coordinate
@@ -43,8 +43,24 @@ def make_LosMatrix(r,z):
                 # if the chord passes only the outer side
             elif np.abs(z[i]) > r_in:
                 A[i,n-1] = 2.*np.sqrt(r_out **2. - z[i]**2)
-
     return A
+
+def make_cosTheta(r,z):
+    """
+    Construct a matrix for a cylindrical plasma coordinate.
+    cos(theta[i,j]) element stores a passing length for a shell j by chord i.
+
+    r: radius coordinate
+    z: los position.
+    """
+    n = r.shape[0]
+    N = z.shape[0]
+    cosTheta = np.zeros((N,n))
+    for i in range(N):
+        for j in range(n):
+            if np.abs(z[i]) < r[j]:
+                cosTheta[i,j] = z[i]/r[j]
+    return cosTheta
 
 
 import tensorflow as tf

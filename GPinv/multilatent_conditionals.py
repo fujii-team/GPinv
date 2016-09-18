@@ -23,7 +23,7 @@ from GPflow._settings import settings
 
 
 @NameScoped("multilatent_conditional")
-def conditional(Xnew, X, kern, f, full_cov=False, q_sqrt=None, whiten=False):
+def conditional(Xnew, X, kern, f, full_cov=False, q_sqrt=None, whiten=False): # pragma: no cover
     """
     This is the modified version of GPflow/conditionals.py.
     The only difference is

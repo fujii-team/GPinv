@@ -66,7 +66,7 @@ class test_single(unittest.TestCase):
         # define the model
         m_gpmc = MultilatentGPMC(model_input_set, self.Y,
                             likelihood=SingleGaussian(num_samples=100))
-        samples = m_gpmc.sample(num_samples=500, Lmax=20, epsilon=0.05, verbose=False)
+        samples = m_gpmc.sample(num_samples=800, Lmax=20, epsilon=0.05, verbose=False)
         noise = []
         for s in samples[300:]:
             m_gpmc.set_state(s)

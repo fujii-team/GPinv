@@ -1,12 +1,10 @@
 import tensorflow as tf
 import numpy as np
-from GPflow.likelihoods import Likelihood
 from GPflow import transforms
 from GPflow.tf_wraps import eye
-from GPflow.param import Param, DataHolder
 from GPflow.likelihoods import Likelihood
-from GPflow import densities
-from .param import MinibatchData
+from . import densities
+from .param import MinibatchData, Param, DataHolder
 
 class TransformedLikelihood(Likelihood):
     def __init__(self, num_samples=20, jitter=1.0e-6):

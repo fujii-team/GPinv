@@ -64,8 +64,8 @@ class test_double(unittest.TestCase):
         m_gpmc.V = self.rng.randn(40,1)
         m_gpmc._compile()
         # prediction
-        f_pred , f_var = m_gpmc.predict_f_set([self.X, self.X])
-        f_pred2, f_var2= m_gpmc.predict_f_set([self.X, self.X2])
+        f_pred , f_var = m_gpmc.predict_f([self.X, self.X])
+        f_pred2, f_var2= m_gpmc.predict_f([self.X, self.X2])
         # Check the result differs for different argument.
         #print(f_pred[0])
         #print(f_pred2[0])

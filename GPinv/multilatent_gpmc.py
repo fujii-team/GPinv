@@ -66,7 +66,7 @@ class MultilatentGPMC(MultilatentModel, TransformedGPMC):
         return mu + self.mean_function(Xnew), var
 
     @MultiFlow()
-    def predict_f_set(self, Xnew):
+    def predict_f(self, Xnew):
         """
         Compute the mean and variance of the latent function(s) at the points
         Xnew.

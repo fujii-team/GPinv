@@ -129,7 +129,7 @@ class test_double(unittest.TestCase):
         f_mu_set = []
         for s in samples[500:]:
             m_gpmc.set_state(s)
-            f_mu, f_var = m_gpmc.predict_f_set([self.X, self.X])
+            f_mu, f_var = m_gpmc.predict_f([self.X, self.X])
             f_mu_set.append(f_mu[0]+f_mu[1])
         f_mean = np.median(np.array(f_mu_set), axis=0)
         f_pred_ref = self.m_ref.predict_f(self.X)[0]

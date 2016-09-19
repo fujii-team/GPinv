@@ -50,7 +50,7 @@ class Test_gpmc(unittest.TestCase):
             noise.append(model.likelihood.variance.value)
         noise_avg = np.mean(noise)
         print(noise_avg)
-        self.assertTrue(np.allclose(noise_avg, e*e, rtol=0.2))
+        self.assertTrue(np.allclose(noise_avg, e*e, rtol=0.3))
 
 if __name__ == '__main__':
     unittest.main()

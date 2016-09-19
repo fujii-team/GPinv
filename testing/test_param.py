@@ -1,6 +1,8 @@
 import tensorflow as tf
+import GPflow
+import GPinv
 from GPinv import transforms
-from GPinv.param import SemiDiag, MultiDiagL
+from GPinv.param import SemiDiag, MultiDiagL, SqrtParamList
 import numpy as np
 import unittest
 

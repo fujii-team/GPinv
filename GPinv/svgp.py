@@ -42,16 +42,18 @@ class TransformedSVGP(SVGP):
         - whiten is a boolean. If True, we use the whitened representation of
           the inducing points.
         """
-        # sort out the X, Y into MiniBatch objects.
+        self.num_data = Y.shape[0]
+        # if minibatch_size is None, Y is treated just as DataHolder
         if minibatch_size is None:
-            minibatch_size = X.shape[0]
-        self.num_data = X.shape[0]
+            minibatch_size = Y.shape[0]
+            Y = DataHolder(Y)
+        else:
+            Y = MinibatchData(Y, minibatch_size)
 
         if X_minibatch:
             X = MinibatchData(X, minibatch_size)
         else:
             X = DataHolder(X)
-        Y = MinibatchData(Y, minibatch_size)
 
         # init the super class, accept args
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
@@ -61,15 +63,22 @@ class TransformedSVGP(SVGP):
         self.num_inducing = Z.shape[0]
 
         # init variational parameters
-        self.q_mu = Param(np.zeros((self.num_inducing, self.num_latent)))
+        self.q_mu_param = Param(np.zeros((self.num_inducing, self.num_latent)))
         if self.q_diag:
-            self.q_sqrt = Param(np.ones((self.num_inducing, self.num_latent)),
+            self.q_sqrt_param = Param(np.ones((self.num_inducing, self.num_latent)),
                                 transforms.positive)
         else:
             q_sqrt = np.array([np.eye(self.num_inducing)
                                for _ in range(self.num_latent)]).swapaxes(0, 2)
-            self.q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform)
+            self.q_sqrt_param = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform)
 
+    @property
+    def q_mu(self):
+        return self.q_mu_param
+
+    @property
+    def q_sqrt(self):
+        return self.q_sqrt_param
 
     def build_likelihood(self):
         """
@@ -79,13 +88,8 @@ class TransformedSVGP(SVGP):
         KL = self.build_prior_KL()
         # Get conditionals
         fmean, fcov = self.build_predict(self.X, full_cov=True)
-        # TODO Rank-two downgrade should be applied (if possible).
-        jitter = tf.tile(tf.expand_dims(eye(tf.shape(self.X)[0]), [0]),
-                        [self.num_latent, 1,1]) * 1.0e-6
-        Lcov = tf.transpose(
-                    tf.batch_cholesky(tf.transpose(fcov, [2,0,1]) + jitter), [1,2,0])
         # Get variational expectations.
-        var_exp = self.likelihood.stochastic_expectations(fmean, Lcov, self.Y)
+        var_exp = self.likelihood.stochastic_expectations(fmean, fcov, self.Y)
         # re-scale for minibatch size
         scale = tf.cast(self.num_data, tf.float64) / tf.cast(tf.shape(self.Y)[0], tf.float64)
         return tf.reduce_sum(var_exp) * scale - KL

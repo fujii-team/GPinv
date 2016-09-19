@@ -5,7 +5,7 @@ from GPflow.tf_wraps import eye
 from GPflow.likelihoods import Gaussian
 from GPflow.param import AutoFlow, DataHolder
 from GPflow.mean_functions import Zero
-from GPflow import densities
+from . import densities
 
 class LinearModel(GPModel):
     """

@@ -134,15 +134,12 @@ class TransformedVGP(GPModel):
                     + tf.reduce_sum(K_alpha*self.q_alpha))
 
         # Posterior covariance
-        # TODO Rank-two update should be applied to evaluate Lcov.
         Ai = tf.batch_matmul(Li, Li, adj_y=True) # A^-1
-        # Here, 1.0e-9 * eye is added for stability.
-        Lcov_tmp = tf.batch_cholesky(I - Ai + I*1.0e-12) # (I - A^-1)^(1/2)
-        Lcov = tf.batch_matmul(Llam_inv, Lcov_tmp)
-
+        cov = tf.batch_matmul(tf.batch_matmul(Llam_inv, I - Ai + I*1.0e-12),
+                        Llam_inv, adj_y=True)
         # Lcov.shape = [num_data, num_data, num_latent]
         v_exp = self.likelihood.stochastic_expectations(
-                f_mean, tf.transpose(Lcov, [1,2,0]), self.Y)
+                f_mean, tf.transpose(cov, [1,2,0]), self.Y)
         return tf.reduce_sum(v_exp) - KL
 
 

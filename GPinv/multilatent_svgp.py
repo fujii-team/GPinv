@@ -17,22 +17,20 @@
 
 import tensorflow as tf
 import numpy as np
-from GPflow.tf_wraps import eye
 from GPflow.model import GPModel
 from . import transforms
 from .param import DataHolder, Param, Parameterized, ParamList, MinibatchData
-from .kernels import BlockDiagonal
-from .mean_functions import Zero, SwitchedMeanFunction
 from .svgp import TransformedSVGP
 from .multilatent_likelihoods import MultilatentLikelihood
 from .multilatent_conditionals import conditional
+from .multilatent_models import MultilatentModel
 
-class MultilatentSVGP(TransformedSVGP):
+class MultilatentSVGP(MultilatentModel, TransformedSVGP):
     """
     SVGP for the transformed likelihood with multiple latent functions.
     """
     def __init__(self, model_input_set,
-                 Y, likelihood,
+                 Y, likelihood, whiten=True,
                  minibatch_size=None, random_seed=0):
         """
         - model_inputs: list of ModelInput objects.
@@ -42,14 +40,15 @@ class MultilatentSVGP(TransformedSVGP):
         - q_shape is one of ['fullrank', 'diagonal', 'specified']
         - q_indices_list is list of tuples, which indicates the corelation
                                                 between each model_input.
+        - whiten : If true, the whitened representation for q_mu and q_sqrt
+                                            is adopted.
         - minibatch_size is the size for the minibatching for Y
         - random_seed is the seed for the Y-minibatching.
         """
         self.model_input_set = model_input_set
         self.num_data = Y.shape[0]
         # currently, whiten option is not supported.
-        self.whiten = True
-
+        self.whiten = whiten
         self.num_latent = self.model_input_set.num_latent
 
         # Construct input vector, kernel, and mean_functions from input_list
@@ -89,5 +88,5 @@ class MultilatentSVGP(TransformedSVGP):
 
     def build_predict(self, Xnew, full_cov=False):
         mu, var = conditional(Xnew, self.Z, self.kern, self.q_mu,
-                                           q_sqrt=self.q_sqrt, full_cov=full_cov, whiten=self.whiten)
+                     q_sqrt=self.q_sqrt, full_cov=full_cov, whiten=self.whiten)
         return mu + self.mean_function(Xnew), var

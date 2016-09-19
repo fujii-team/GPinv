@@ -33,8 +33,10 @@ is supported.
   - VGP with a stochastic integration.  
   - SVGP with a sparse approximation of VGP [(notebook)](notebooks/sparse_nonlinear_model_example.ipynb).
 
-In the future, GPinv will support more flexible models,
-<img src=doc/readme_imgs/flexible_model.png> where observations are functions of multiple latent GP values.
++ Nonlinear model with multiple latent functions [(Notebook)](notebooks/multilatent_gpmc_demo.ipynb),
+where the observation is written by non-linear transform of multiple GP functions,
+i.e. <img src=doc/readme_imgs/flexible_model.png>
+  - MCMC with multiple latent functions
 
 ## Dependencies
 **GPinv** heavily depends on

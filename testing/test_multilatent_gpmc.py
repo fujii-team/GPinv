@@ -56,7 +56,7 @@ class test_single(unittest.TestCase):
         self.m_ref.optimize()
         tf.set_random_seed(1)
 
-    def _test_gpmc(self):
+    def test_gpmc(self):
         # tested svgp
         # define the model_input
         model_input1 = ModelInput(self.X, kernels.RBF(1))

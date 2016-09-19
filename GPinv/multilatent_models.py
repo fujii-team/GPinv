@@ -13,16 +13,23 @@ class MultilatentModel(GPModel):
         """
         Compute the mean and variance of the latent function(s) at the points
         Xnew.
+        Return list of tensor.
         """
-        return self.build_predict(Xnew)
+        fmu, var = self.build_predict(Xnew)
+        return Xnew.partition(fmu), Xnew.partition(var)
 
     @MultiFlow()
-    def predict_f_full_cov(self, Xnew):
+    def predict_g(self):
         """
-        Compute the mean and covariance matrix of the latent function(s) at the
-        points Xnew.
+        Compute the mean and variance of the latent function(s) at the points
+        Y.
+        Returns gmu, gmu-2sigma, gmu+2sigma
         """
-        return self.build_predict(Xnew, full_cov=True)
+        fmu, cov = self.build_predict(self.X, full_cov=True)
+        gmu, gvar = self.likelihood.stochastic_map(fmu, cov)
+        return self.likelihood.link_func.backward(gmu), \
+               self.likelihood.link_func.backward(gmu-2.*gvar), \
+               self.likelihood.link_func.backward(gmu+2.*gvar), \
 
 
 class ModelInput(object):

@@ -192,8 +192,10 @@ class test_double(unittest.TestCase):
         self.assertTrue(np.allclose(self.m_ref.likelihood.variance.value,
                                   m_stvgp.likelihood.variance.value,
                              rtol=0.3))
-        #m_svgp = MultilatentSVGP(model_input_set, self.Y,
-        #                    likelihood=DoubleLikelihood(num_samples=100))
+        # Prediction
+        f_mu, f_var = m_stvgp.predict_f([self.X, self.X])
+        f_mu_ref, f_var_ref = self.m_ref.predict_f(self.X)
+        self.assertTrue(np.allclose(f_mu_ref, f_mu[0]+f_mu[1], atol=0.1))
 
 if __name__ == '__main__':
     unittest.main()

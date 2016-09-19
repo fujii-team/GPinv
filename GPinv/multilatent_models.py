@@ -1,9 +1,29 @@
 import tensorflow as tf
 import numpy as np
+from GPflow.model import GPModel
 from .param import ConcatDataHolder, ConcatParamList, SqrtParamList
 from .kernels import BlockDiagonal
 from .mean_functions import Zero, SwitchedMeanFunction
 from . import transforms
+from .multilatent_param import MultiFlow
+
+class MultilatentModel(GPModel):
+    @MultiFlow()
+    def predict_f(self, Xnew):
+        """
+        Compute the mean and variance of the latent function(s) at the points
+        Xnew.
+        """
+        return self.build_predict(Xnew)
+
+    @MultiFlow()
+    def predict_f_full_cov(self, Xnew):
+        """
+        Compute the mean and covariance matrix of the latent function(s) at the
+        points Xnew.
+        """
+        return self.build_predict(Xnew, full_cov=True)
+
 
 class ModelInput(object):
     """
@@ -43,7 +63,7 @@ class ModelInputSet(object):
     """
     def __init__(self, input_list, num_latent = 1,
         q_shape = None,
-        q_indices_list = None, q_sqrt_list=None, jitter=1.e-6 
+        q_indices_list = None, q_sqrt_list=None, jitter=1.e-6
     ):
         """
         - input_list: List of the ModelInput.

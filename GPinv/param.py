@@ -28,7 +28,7 @@ class ConcatDataHolder(Parameterized):
     A DataHolder for the multiple-latent model input.
     We extend dimension of X where the last dimension shows the data index.
     """
-    def __init__(self, Xlist, minibatch_sizes=None, random_seeds=0):
+    def __init__(self, Xlist, minibatch_sizes=None, random_seeds=None):
         """
         - Xlist: list of 2d-np.array, that will be treat as ConcatData
         - minibatch_sizes: list of integer or None. If it is None,
@@ -38,20 +38,34 @@ class ConcatDataHolder(Parameterized):
         """
         Parameterized.__init__(self)
         self.data_holder_list = []
-        begin = 0
-        self.slice_begin = []
+        if minibatch_sizes is None: # pad None
+            minibatch_sizes = [None for _ in Xlist]
+        if random_seeds is None:# pad None
+            random_seeds = [None for _ in Xlist]
+
         for X, minibatch_size, seed in zip(Xlist, minibatch_sizes, random_seeds):
-            self.slice_begin.append(begin)
             if minibatch_size:
                 self.data_holder_list.append(
-                    MinibatchData(X, minibatch_size=minibatch_size,
+                    MinibatchData(X.copy(), minibatch_size=minibatch_size,
                                 rng=np.random.RandomState(seed)))
-                begin += minibatch_size
             else:
                 self.data_holder_list.append(
-                    DataHolder(X, on_shape_change='recompile'))
-                begin += X.shape[0]
-        self.shape = [begin, Xlist[0].shape[1]]
+                    DataHolder(X.copy(), on_shape_change='recompile'))
+        self.update_shapes()
+
+    def update_shapes(self):
+        """
+        update the shape and slice_begin
+        """
+        self.slice_begin = []
+        begin = 0
+        for d in self.data_holder_list:
+            self.slice_begin.append(begin)
+            if isinstance(d, MinibatchData):
+                begin += d.minibatch_size
+            else:
+                begin += d.shape[0]
+        self.shape = [begin, self.data_holder_list[0].shape[1]]
 
     def __getitem__(self, index):
         if self._tf_mode: # Returns the data part of the array
@@ -62,6 +76,7 @@ class ConcatDataHolder(Parameterized):
     def __setitem__(self, index, item):
         # Set the data and attach the additional index. This
         self.data_holder_list[index].set_data(item)
+        self.update_shapes()
 
     def concat(self):
         """
@@ -79,6 +94,15 @@ class ConcatDataHolder(Parameterized):
             feed_dict.update(d.get_feed_dict())
         return feed_dict
 
+    def partition(self, X):
+        """
+        Split X into a list of np.array
+        """
+        if self._tf_mode:
+            return [tf.slice(X, [begin, 0], [tf.shape(x._tf_array)[0],-1]) for x, begin
+                 in zip(self.data_holder_list, self.slice_begin)]
+        else:
+            return np.split(X, self.slice_begin)[1:]
 
 class ConcatParamList(ParamList):
     """

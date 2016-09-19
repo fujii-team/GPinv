@@ -51,6 +51,12 @@ class test_multilatent_param(unittest.TestCase):
         X2 = self.rng.randn(10,2)
         m.concatData[1] = X2
         self.assertTrue(np.allclose(X2, m.concatData[1]))
+        # check Split
+        X_rndn = self.rng.randn(20)
+        X_split = m.concatData.partition(X_rndn)
+        self.assertTrue(np.allclose(X_rndn[:10], X_split[0]))
+        self.assertTrue(np.allclose(X_rndn[10:], X_split[1]))
+
 
     def test_ConcatParamList(self):
         m = GPflow.model.Model()

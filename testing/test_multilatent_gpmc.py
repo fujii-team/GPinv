@@ -24,7 +24,7 @@ class SingleGaussian(MultilatentLikelihood):
     def transform(self, F_list):
         return F_list[0]
 
-    def logp(self, F, Y):
+    def log_p(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
 
 
@@ -36,7 +36,7 @@ class DoubleLikelihood(MultilatentIndependent):
     def transform(self, F_list):
         return F_list[0] + F_list[1]
 
-    def logp(self, F, Y):
+    def log_p(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
 
 

@@ -5,18 +5,63 @@ from GPflow.tf_wraps import eye
 from GPflow.likelihoods import Likelihood
 from . import densities
 from .param import MinibatchData, Param, DataHolder
+from . import link_functions
 
 class TransformedLikelihood(Likelihood):
-    def __init__(self, num_samples=20, jitter=1.0e-6):
+    def __init__(self, num_samples=20, jitter=1.0e-6, link_func=link_functions.Identity()):
         """
         Likelihood with correlation.
         :param num_samples: number of random point to approximate the
                                      variational expectation.
+        :param GPflow.transform map: transfrom function to approximate
+                                    g(f) by Gaussian. For example, if g(x) is
+                                    spanned in the positive space, gaussian may
+                                    be better to be transformed by tf.exp.
         """
         Likelihood.__init__(self)
         # number of random numbers to approximate the integration
         self.num_samples = num_samples
         self.jitter=jitter
+        self.link_func = link_func
+
+    def stochastic_map(self, Fmu, cov):
+        """
+        Approximate g(f) by Gaussian distribution.
+        This approximation is made based on particle filter, i.e. from given
+        Fmu and cov, we generate random particles that follows N(Fmu, cov) and
+        approximate their transformed result by Gaussian distribution.
+
+        :args
+         Fmu: Mean of the latent function. shape=[N,M]
+         cov: Covariance of the posterior. shape=[N,N,M]
+         Y  : Data. shape=[N',M']
+
+        :return
+         mean and variance of G
+        """
+        N = tf.shape(cov)[0]
+        M = tf.shape(cov)[2]
+        # get cholesky factor with size [M, N, N]
+        L = self.getCholeskyOf(tf.transpose(cov, [2,0,1]))
+        # normal random vector with shape [num_samples, M, N, 1]
+        rndn = tf.random_normal( [self.num_samples, M, N, 1],dtype=tf.float64)
+        # L.shape [num_samples, M, N, N]
+        L = tf.tile(tf.expand_dims(L, [0]),[self.num_samples, 1,1,1])
+        # Sampled point of F.
+        # X.shape = [num_samples, N, M]. Mean: Fmu, Cov: LLt
+        X = tf.tile(tf.expand_dims(Fmu, [0]), [self.num_samples, 1, 1]) + \
+            tf.transpose(tf.squeeze(tf.batch_matmul(L, rndn), [3]), [0,2,1])
+        # The mean and variance of latent values for data point Y.
+        # Shape [num_samples', N', M']
+        G = self.link_func.forward(self.transform_tensor(X))
+        # Estimate mean and variance. shape [1, N, M] for each.
+        Gmu = tf.reduce_mean(G, reduction_indices=[0], keep_dims=True)
+        # shape [N', M']
+        Gvar = tf.reduce_mean(
+            tf.square(G-tf.tile(Gmu, [self.num_samples, 1, 1])),
+            reduction_indices=[0])
+        Gmu = tf.squeeze(Gmu,[0])
+        return Gmu, Gvar
 
     def stochastic_expectations(self, Fmu, cov, Y):
         """
@@ -39,29 +84,7 @@ class TransformedLikelihood(Likelihood):
          Stochastic approximation of
          \integ{logp(Y|f) N(f|Fmu,cov) df}
         """
-        N = tf.shape(cov)[0]
-        M = tf.shape(cov)[2]
-        # get cholesky factor with size [M, N, N]
-        L = self.getCholeskyOf(tf.transpose(cov, [2,0,1]))
-        # normal random vector with shape [num_samples, M, N, 1]
-        rndn = tf.random_normal( [self.num_samples, M, N, 1],dtype=tf.float64)
-        # L.shape [num_samples, M, N, N]
-        L = tf.tile(tf.expand_dims(L, [0]),[self.num_samples, 1,1,1])
-        # Sampled point of F.
-        # X.shape = [num_samples, N, M]. Mean: Fmu, Cov: LLt
-        X = tf.tile(tf.expand_dims(Fmu, [0]), [self.num_samples, 1, 1]) + \
-            tf.transpose(tf.squeeze(tf.batch_matmul(L, rndn), [3]), [0,2,1])
-        # The mean and variance of latent values for data point Y.
-        # Shape [num_samples', N', M']
-        G = self.transform_tensor(X)
-        # Estimate mean and variance. shape [1, N, M] for each.
-        Gmu = tf.reduce_mean(G, reduction_indices=[0], keep_dims=True)
-        # shape [N', M']
-        Gvar = tf.reduce_mean(
-            tf.square(G-tf.tile(Gmu, [self.num_samples, 1, 1])),
-            reduction_indices=[0])
-        Gmu = tf.squeeze(Gmu,[0])
-
+        Gmu, Gvar = self.stochastic_map(Fmu, cov)
         return self.variational_expectations(tf.transpose(Gmu), tf.transpose(Gvar), Y)
 
     def getCholeskyOf(self, cov):
@@ -86,7 +109,7 @@ class TransformedLikelihood(Likelihood):
         G = self.transform_tensor(X)
         # reshape to match self.logp input
         Y = tf.expand_dims(Y, [0])
-        return self.logp(G, Y)
+        return self.log_p(G, Y)
 
     def transform_tensor(self, F):
         """
@@ -108,6 +131,12 @@ class TransformedLikelihood(Likelihood):
         raise NotImplementedError
 
     def logp(self, F, Y):
+        """
+        This method is called from GPflow.likelihood.variational_expectations
+        """
+        return self.log_p(self.link_func.backward(F), Y)
+
+    def log_p(self, F, Y):
         """
         Return p(Y|F)
 
@@ -134,7 +163,7 @@ class Gaussian(TransformedLikelihood):
     def transform(self, F):
         return F
 
-    def logp(self, F, Y):
+    def log_p(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
 
     def stochastic_expectations(self, Fmu, cov, Y):

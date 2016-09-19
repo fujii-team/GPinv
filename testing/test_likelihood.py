@@ -14,7 +14,7 @@ class GaussianLikelihood_ref(object):
         self.num_samples = num_samples
         self.rng = np.random.RandomState(0)
 
-    def logp(self, y, f):
+    def log_p(self, y, f):
         return -0.5 * np.log(2 * np.pi) \
                - 0.5 * np.log(self.variance)\
                - 0.5 * np.square(f-y)/self.variance
@@ -29,7 +29,7 @@ class GaussianLikelihood_ref(object):
         expectations = np.zeros(f.shape)
         for i in range(self.num_samples):
             f_sample = f+np.dot(L, self.rng.randn(L.shape[1]))
-            expectations += self.logp(f_sample, y) / self.num_samples
+            expectations += self.log_p(f_sample, y) / self.num_samples
         return expectations
 
 

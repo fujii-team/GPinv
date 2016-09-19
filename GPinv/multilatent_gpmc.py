@@ -74,3 +74,16 @@ class MultilatentGPMC(MultilatentModel, TransformedGPMC):
         """
         fmu, var = self.build_predict(Xnew)
         return Xnew.partition(fmu), Xnew.partition(var)
+
+    @MultiFlow()
+    def predict_g(self):
+        """
+        Compute the mean and variance of the latent function(s) at the points
+        Y.
+        Returns gmu, gmu-2sigma, gmu+2sigma
+        """
+        fmu, cov = self.build_predict(self.X, full_cov=True)
+        gmu, gvar = self.likelihood.stochastic_map(fmu, cov)
+        return self.likelihood.link_func.backward(gmu), \
+               self.likelihood.link_func.backward(gmu-2.*gvar), \
+               self.likelihood.link_func.backward(gmu+2.*gvar), \

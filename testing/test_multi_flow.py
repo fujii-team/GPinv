@@ -21,7 +21,7 @@ class DoubleLikelihood(MultilatentIndependent):
     def transform(self, F_list):
         return F_list[0] + F_list[1]
 
-    def logp(self, F, Y):
+    def log_p(self, F, Y):
         return densities.gaussian(F, Y, self.variance)
 
 class test_double(unittest.TestCase):
@@ -71,6 +71,7 @@ class test_double(unittest.TestCase):
         #print(f_pred2[0])
         self.assertFalse(np.allclose(f_pred[1], f_pred2[1]))
 
+        g_mu, gmu_minus, gmu_plus = m_gpmc.predict_g()
 
 
 if __name__ == '__main__':

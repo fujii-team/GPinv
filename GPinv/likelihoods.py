@@ -85,7 +85,7 @@ class TransformedLikelihood(Likelihood):
         X = tf.expand_dims(X, [0])
         G = self.transform_tensor(X)
         # reshape to match self.logp input
-        G = tf.squeeze(G, [0])
+        Y = tf.expand_dims(Y, [0])
         return self.logp(G, Y)
 
     def transform_tensor(self, F):
@@ -111,8 +111,8 @@ class TransformedLikelihood(Likelihood):
         """
         Return p(Y|F)
 
-        :param tf.tensor Y: shape [N', M']
-        :param tf.tensor F: shape [N', M']
+        :param tf.tensor Y: shape [k, N', M']
+        :param tf.tensor F: shape [k, N', M']
         """
         raise NotImplementedError
 

@@ -134,11 +134,10 @@ class test_block_diagonal(unittest.TestCase):
         self.rng = np.random.RandomState(0)
         self.X1 = self.rng.randn(10, 2)
         self.Z1 = self.rng.randn( 3, 2)
-        self.model_input1 = ModelInput(self.X1, GPinv.kernels.RBF(2), self.Z1)
-
         self.X2 = self.rng.randn(11, 2)
         self.Z2 = self.rng.randn( 4, 2)
-        self.model_input2 = ModelInput(self.X2, GPinv.kernels.RBF(2), self.Z2)
+        self.X3 = self.rng.randn(12, 2)
+        self.Z3 = self.rng.randn( 5, 2)
 
     def test(self):
         model_input1 = ModelInput(self.X1, RBF(2), self.Z1)
@@ -146,8 +145,8 @@ class test_block_diagonal(unittest.TestCase):
         model_input_set = ModelInputSet([model_input1, model_input2])
 
         m = GPflow.model.Model()
-        jitter = 1.0e-3
-        m.kern = model_input_set.getKernel(jitter=1.0e-3)
+        jitter = 1.0e-6
+        m.kern = model_input_set.getKernel(jitter)
         m.X = model_input_set.getConcat_X()
         m.Z = model_input_set.getConcat_Z()
 
@@ -183,6 +182,34 @@ class test_block_diagonal(unittest.TestCase):
         Kxx_cholesky = np.dot(cholesky, np.transpose(cholesky))
         Kxx_jitter = Kxx + np.eye(self.Z1.shape[0]+self.Z2.shape[0])*jitter
         self.assertTrue(np.allclose(Kxx_cholesky, Kxx_jitter))
+
+    def test_3(self):
+        model_input1 = ModelInput(self.X1, RBF(2), self.Z1)
+        model_input2 = ModelInput(self.X1, RBF(2), self.Z2) # same X variable
+        model_input3 = ModelInput(self.X1, RBF(2), self.Z3) # same X variable
+        model_input_set = ModelInputSet([model_input1, model_input2, model_input3])
+
+        m = GPflow.model.Model()
+        m.kern = model_input_set.getKernel()
+        m.X = model_input_set.getConcat_X()
+        m.Z = model_input_set.getConcat_Z()
+
+        tf_array = m.get_free_state()
+        m.make_tf_array(tf_array)
+        sess = tf.Session()
+        sess.run(tf.initialize_all_variables())
+        with m.tf_mode():
+            Kxx  = sess.run(m.kern.K(m.Z), feed_dict = m.get_feed_dict())
+            Kxx2 = sess.run(m.kern.K(m.Z, m.X), feed_dict = m.get_feed_dict())
+            Kdiag = sess.run(m.kern.Kdiag(m.Z), feed_dict = m.get_feed_dict())
+            cholesky = sess.run(m.kern.Cholesky(m.Z), feed_dict = m.get_feed_dict())
+        kern_ref = ref_rbf(m.kern.kern_list[0])
+        # Kxx
+        # diagonal block
+        self.assertTrue(np.allclose(kern_ref.K(self.Z1, self.Z1), Kxx[:3,:3]))
+        self.assertTrue(np.allclose(kern_ref.K(self.Z2, self.Z2), Kxx[3:7,3:7]))
+        self.assertTrue(np.allclose(kern_ref.K(self.Z3, self.Z3), Kxx[7:,7:]))
+
 
 if __name__ == '__main__':
     unittest.main()

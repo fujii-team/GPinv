@@ -22,7 +22,7 @@ from GPflow.likelihoods import Likelihood
 from GPflow.tf_wraps import eye
 from .mean_functions import Zero
 from .likelihoods import TransformedLikelihood
-
+'''
 class TransformedGPMC(GPMC):
     """
     The same with GPflow.gpmc.GPMC, but can accept TransformedLikelihood.
@@ -47,3 +47,4 @@ class TransformedGPMC(GPMC):
     def getCholesky(self):
         K = self.kern.K(self.X)
         return tf.cholesky(K + eye(tf.shape(K)[0])*1e-6)
+'''

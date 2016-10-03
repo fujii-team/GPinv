@@ -5,7 +5,6 @@ from GPflow.tf_wraps import eye
 from GPflow import likelihoods
 from . import densities
 from .param import MinibatchData, Param, DataHolder, Parameterized
-from . import link_functions
 
 class Likelihood(Parameterized):
     """

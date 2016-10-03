@@ -69,16 +69,37 @@ class Stationary(kernels.Stationary):
 
     def _Kcore(self, X, X2=None):
         """
-        Returns
+        Returns the unit kernel which is common for all the output dimensions.
         """
         raise NotImplementedError
+
 
 class RBF(Stationary):
     """
     The radial basis function (RBF) or squared exponential kernel
     """
     def _Kcore(self, X, X2=None):
-        """
-        """
         X, X2 = self._slice(X, X2)
         return tf.exp(-self.square_dist(X, X2)/2)
+
+class RBF_csym(RBF):
+    """
+    RBF kernel with a cylindrically symmetric assumption.
+    The kernel value is
+    K(x,x') = a exp(-(x+x)^2/2l^2)+a exp(-(x-x)^2/2l^2))
+    """
+    def _Kcore(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        return RBF._Kcore(self, X, X2) + RBF._Kcore(self, X, -X2)
+
+    def Kdiag(self, X):
+        # returns [N] tensor
+        X, _ = self._slice(X, None)
+        square_dist = tf.reduce_sum(tf.square((X+X)/self.lengthscales), 1)
+        # shape [N,R]
+        var = tf.tile(tf.expand_dims(self.variance,0), [tf.shape(X)[0],1])
+        diag = tf.exp(-0.5*square_dist)
+        diag = tf.tile(tf.expand_dims(diag + tf.ones_like(diag), -1),
+                                    [1,tf.shape(var)[1]])
+        return var * diag

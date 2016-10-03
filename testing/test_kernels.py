@@ -1,6 +1,6 @@
 from __future__ import print_function
 import GPinv
-from GPinv.kernels import RBF
+from GPinv.kernels import RBF,RBF_csym
 import GPflow
 import numpy as np
 import unittest
@@ -37,7 +37,22 @@ class RefRBF(object):
         K_diag = np.zeros((X.shape[0], self.kern.variance.value.shape[0]))
         for i in range(X.shape[0]):
             var = self.kern.variance.value
-            K_diag[i] = var
+            K_diag[i,:] = var
+        return K_diag
+
+class RefRBF_csym(RefRBF):
+    def K(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        return RefRBF.K(self,X,X2)+RefRBF.K(self,X,-X2)
+
+    def Kdiag(self, X):
+        K_diag = np.zeros((X.shape[0], self.kern.variance.value.shape[0]))
+        for i in range(X.shape[0]):
+            var = self.kern.variance.value
+            x_dif = 2*X[i]/self.kern.lengthscales.value
+            sq_dist = np.sum(x_dif*x_dif)
+            K_diag[i,:] = var * (1.+np.exp(-0.5*sq_dist))
         return K_diag
 
 
@@ -47,6 +62,7 @@ class test_rbf(unittest.TestCase):
         var = np.exp(rng.randn(3))
         self.m = GPflow.param.Parameterized()
         self.m.kern = RBF(2, 3, var, ARD=True)
+        self.m.kern_csym = RBF_csym(2, 3, var, ARD=True)
         self.X  = rng.randn(10,2)
         self.X2 = rng.randn(11,2)
         # prepare Parameterized
@@ -80,6 +96,35 @@ class test_rbf(unittest.TestCase):
         with self.m.tf_mode():
             K = self.sess.run(self.m.kern.K(self.X))
             chol = self.sess.run(self.m.kern.Cholesky(self.X))
+        for i in range(chol.shape[2]):
+            self.assertTrue(np.allclose(K[:,:,i],
+                        np.dot(chol[:,:,i], np.transpose(chol[:,:,i]))))
+    # ------ test for RBF_csym -----
+    def test_Kxx_csym(self):
+        with self.m.tf_mode():
+            Kxx  = self.sess.run(self.m.kern_csym.K(self.X))
+        ref_rbf = RefRBF_csym(self.m.kern)
+        Kxx_ref = ref_rbf.K(self.X)
+        self.assertTrue(np.allclose(Kxx, Kxx_ref))
+
+    def test_Kxx2_csym(self):
+        with self.m.tf_mode():
+            Kxx2 = self.sess.run(self.m.kern_csym.K(self.X,self.X2))
+        ref_rbf = RefRBF_csym(self.m.kern)
+        Kxx2_ref = ref_rbf.K(self.X,self.X2)
+        self.assertTrue(np.allclose(Kxx2, Kxx2_ref))
+
+    def test_Kdiag_csym(self):
+        with self.m.tf_mode():
+            Kdiag = self.sess.run(self.m.kern_csym.Kdiag(self.X))
+        ref_rbf = RefRBF_csym(self.m.kern)
+        Kdiag_ref = ref_rbf.Kdiag(self.X)
+        self.assertTrue(np.allclose(Kdiag, Kdiag_ref))
+
+    def test_Cholesky_csym(self):
+        with self.m.tf_mode():
+            K = self.sess.run(self.m.kern_csym.K(self.X))
+            chol = self.sess.run(self.m.kern_csym.Cholesky(self.X))
         for i in range(chol.shape[2]):
             self.assertTrue(np.allclose(K[:,:,i],
                         np.dot(chol[:,:,i], np.transpose(chol[:,:,i]))))

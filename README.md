@@ -2,11 +2,7 @@
 [![Build status](https://codeship.com/projects/8e8c5940-5322-0134-e799-4668b3c53a58/status?branch=master)](https://codeship.com/projects/147609)
 [![Coverage status](https://codecov.io/gh/fujii-team/GPinv/branch/master/graph/badge.svg)](https://codecov.io/gh/fujii-team/GPinv)
 
-An inverse problem solver with Gaussian Process prior.
-
-**Note**
-
-This repository is currently for the **EDUCATIONAL** purpose for the software development.
+A non-linear inverse problem solver with Gaussian Process prior.
 
 ## Background
 
@@ -15,33 +11,17 @@ We consider the following inverse problem,
 where
 **y** is the noisy observation of
 some transform of the latent function **f**.  
-**e** is independent zero-mean noise component.  
+**e** is noise component.
 *F* is a function that is specific to the problem.  
 For solving this inverse problem, a *prior* knowledge is necessary.  
 In **GPinv**, we assume **f** follows *Gaussian Process*.
 
 ## Supported models
-GPinv supports a linear model and some simple nonlinear models.
+Currently, GPinv supports Stochastic Variational Gaussian Process solver (StVGP).
+The theoretical background can be found in [(Notebook)](notebooks/StVGP_notes.ipynb)
 
-+ Linear model
-[(Notebook)](notebooks/linear_model_example.ipynb)  
-<img src=doc/readme_imgs/linear_model.png>  where A is a given matrix,
-is supported.
+Examples can be found in [notebooks directorly.](notebooks)
 
-+ Nonlinear model [(Notebook)](notebooks/nonlinear_model_example.ipynb)
-  - MCMC with a single latent function.
-  - VGP with a stochastic integration.  
-  - SVGP with a sparse approximation of VGP [(notebook)](notebooks/sparse_nonlinear_model_example.ipynb).
-
-
-+ Nonlinear model with multiple latent functions.
-
-  In multiple latent function models, we consider the observation is written by non-linear transform of multiple GP functions,
-i.e. <img src=doc/readme_imgs/flexible_model.png>.  
-  We implemented two multiple latent function models,
-  - MCMC with multiple latent functions [(Notebook)](notebooks/multilatent_gpmc_demo.ipynb)
-  - SVGP with a sparse approximation [(Notebook)](notebooks/multilatent_svgp_demo.ipynb)
-  
 
 ## Dependencies
 **GPinv** heavily depends on

@@ -17,10 +17,14 @@ For solving this inverse problem, a *prior* knowledge is necessary.
 In **GPinv**, we assume **f** follows *Gaussian Process*.
 
 ## Supported models
-Currently, GPinv supports Stochastic Variational Gaussian Process solver (StVGP).
-The theoretical background can be found in [(Notebook)](notebooks/StVGP_notes.ipynb)
+Currently, GPinv supports
++ Stochastic Variational Gaussian Process solver (StVGP).
++ Markov Chain Monte-Carlo method (GPMC).
 
-Examples can be found in [notebooks directorly.](notebooks)
+The theoretical background for StVGP can be found in [(Notebook)](notebooks/StVGP_notes.ipynb)
+
+For the usage, see the following examples,  
+[Abel's inversion](notebooks/Abel_inversion.ipynb)  
 
 
 ## Dependencies

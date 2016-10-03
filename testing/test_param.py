@@ -11,7 +11,7 @@ class test_MinibatchData(unittest.TestCase):
         n = 3
         minibatch_size = 5
         array = rng.randn(N,n)
-        m = GPflow.Parameterized()
+        m = GPflow.param.Parameterized()
         d = MinibatchData(array, minibatch_size, 0)
         #TODO
 

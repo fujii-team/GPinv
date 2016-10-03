@@ -14,7 +14,7 @@ class Constant(mean_functions.Constant):
 class Linear(mean_functions.Linear):
     """ Just a wrap """
     pass
-
+'''
 class SwitchedMeanFunction(mean_functions.MeanFunction):
     """
     This class enables to use different (independent) mean_functions respective
@@ -34,3 +34,4 @@ class SwitchedMeanFunction(mean_functions.MeanFunction):
             [tf.pad(mean(x), [[begin, X.shape[0]-begin-tf.shape(x)[0]],[0,0]])
                 for mean,x,begin
                 in zip(self.meanfunction_list, X, X.slice_begin)])
+'''

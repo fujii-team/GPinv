@@ -1,136 +1,84 @@
-from functools import reduce
 import tensorflow as tf
+import numpy as np
 import GPflow
+from GPflow import kernels
 from GPflow.tf_wraps import eye
-from .param import ParamList
+from GPflow._settings import settings
+float_type = settings.dtypes.float_type
+np_float_type = np.float32 if float_type is tf.float32 else np.float64
 
-class Zero(GPflow.kernels.Kern):
+class Stationary(kernels.Stationary):
     """
-    Zero kernel that simply returns the zero matrix with appropriate size
+    Multidimensional version of Stationary kernel.
+
+    This kernel is sized [X.shape[0],X2.shape[0],R] and written by
+    np.vstack([v_0*core(X,X2), v_1*core(X,X2), ..., v_R*core(X,X2)])
+
+    This object provides efficient Cholesky Factorization method, self.Cholesky,
+    where the cholesky tensor is
+    np.vstack([sqrt(v_0)*chol, sqrt(v_1)*chol, ..., sqrt(v_R)*chol])
+    with
+    chol = Cholesky(K(X) + jitter)
     """
-    def __init__(self, input_dim, active_dims=None):
-        GPflow.kernels.Kern.__init__(self, input_dim, active_dims)
-
-    def K(self, X, X2=None):
-        if X2 is None:
-            X2 = X
-        return tf.zeros(tf.pack([tf.shape(X)[0], tf.shape(X2)[0]]), dtype=tf.float64)
-
-    def Kdiag(self, X):
-        return tf.zeros(tf.pack([tf.shape(X)[0]]), dtype=tf.float64)
-
-
-class White(GPflow.kernels.White):
-    """  Identical to GPflow.kernels.Constant    """
-    pass
-
-class Constant(GPflow.kernels.Constant):
-    """  Identical to GPflow.kernels.Constant    """
-    pass
-
-class Bias(GPflow.kernels.Bias):
-    """  Identical to GPflow.kernels.Bias    """
-    pass
-
-class RBF(GPflow.kernels.RBF):
-    """  Identical to GPflow.kernels.RBF    """
-    pass
-
-class RBF_csym(RBF):
-    """
-    RBF kernel with a cylindrically symmetric assumption.
-
-    The kernel value is
-
-    K(x,x') = a exp(-(x+x)^2/2l^2)+a exp(-(x-x)^2/2l^2))
-    """
-    def K(self, X, X2=None):
-        if X2 is None:
-            X2 = X
-        return RBF.K(self, X, X2) + RBF.K(self, X, -X2)
-
-    def Kdiag(self, X):
-        # returns [N] tensor
-        X, _ = self._slice(X, None)
-        square_dist = tf.reduce_sum(tf.square((X+X)/self.lengthscales), 1)
-        return RBF.Kdiag(self, X) + \
-                self.variance * tf.exp(-0.5*square_dist)
-
-
-class Linear(GPflow.kernels.Linear):
-    """  Identical to GPflow.kernels.Linear    """
-    pass
-
-class Exponential(GPflow.kernels.Exponential):
-    """  Identical to GPflow.kernels.Exponential    """
-    pass
-
-class Matern12(GPflow.kernels.Matern12):
-    """  Identical to GPflow.kernels.Matern12    """
-    pass
-
-class Matern32(GPflow.kernels.Matern32):
-    """  Identical to GPflow.kernels.Matern32    """
-    pass
-
-class Matern52(GPflow.kernels.Matern52):
-    """  Identical to GPflow.kernels.Matern52    """
-    pass
-
-class Cosine(GPflow.kernels.Cosine):
-    """  Identical to GPflow.kernels.Cosine    """
-    pass
-
-class Coregion(GPflow.kernels.Coregion):
-    """  Identical to GPflow.kernels.Coregion    """
-    pass
-
-#---------------- Kernels for the multilatent model ------------------
-class BlockDiagonal(GPflow.kernels.Kern):
-    """
-    The blockdiagonal kernel the element-matrix in which is given by kern_list
-    ! NOTE !
-    This kernel accepts param.ConcatParamList or param.ConcatDataHolder as
-    arguments, rather than tf.tensor.
-    """
-    def __init__(self, kern_list, jitter=1.0e-4):
-        GPflow.kernels.Kern.__init__(self, 1, 1)
-        self.kern_list = ParamList(kern_list)
-        self.jitter=jitter
-
-    def K(self, X, X2=None):
+    def __init__(self, input_dim,
+                 output_dim,
+                 variance=None, lengthscales=None,
+                 active_dims=None, ARD=False):
         """
-        :X and X2 ConcatParamList or ConcatDataHolder: expressive variable for K
+        - input_dim is the dimension of the input to the kernel
+        - output_dim is the dimension of the output of this kernel
+                <-- This is an additional feature from GPflow.kernels.Stationary
+        - variance : [1d-np.array] is the (initial) value for the variance parameter
+                with size output_dim.
+        - lengthscales is the initial value for the lengthscales parameter
+          defaults to 1.0 (ARD=False) or np.ones(input_dim) (ARD=True).
+        - active_dims is a list of length input_dim which controls which
+          columns of X are used.
+        - ARD specifies whether the kernel has one lengthscale per dimension
+          (ARD=True) or a single lengthscale (ARD=False).
         """
-        if X2 is None:
-            return reduce(tf.add,
-                [tf.pad(k.K(x), [[begin, X.shape[0]-begin-tf.shape(x)[0]],
-                                 [begin, X.shape[0]-begin-tf.shape(x)[0]]])
-                    for k,x,begin
-                    in zip(self.kern_list, X, X.slice_begin)])
-        else:
-            return reduce(tf.add,
-                [tf.pad(k.K(x,x2 ), [[begin, X.shape[0] -begin -tf.shape(x)[0]],
-                                     [begin2,X2.shape[0]-begin2-tf.shape(x2)[0]]])
-                    for k,x,begin,x2,begin2
-                    in zip(self.kern_list, X, X.slice_begin,X2,X2.slice_begin)])
+        # variance should be 1d-np.array sized [output_dim]
+        self.output_dim = output_dim
+        if variance is None:
+            variance = np.ones(output_dim)
+        assert(variance.shape[0] == self.output_dim)
+        kernels.Stationary.__init__(self, input_dim, variance, lengthscales,
+                                    active_dims, ARD)
+    def Kdiag(self,X):
+        """
+        Return: tf.tensor sized [N,R]
+        """
+        return tf.tile(tf.expand_dims(self.variance,0), [tf.shape(X)[0],1])
 
-    def Kdiag(self, X):
-        return reduce(tf.add,
-            [tf.pad(k.Kdiag(x), [[begin,X.shape[0]-begin-tf.shape(x)[0]]])
-                for k,x,begin
-                in zip(self.kern_list, X, X.slice_begin)])
+    def K(self, X, X2=None):
+        core = tf.tile(tf.expand_dims(self._Kcore(X, X2),-1),
+                                [1,1,tf.shape(self.variance)[0]]) # [N,N,R]
+        var = tf.tile(
+                tf.expand_dims(tf.expand_dims(self.variance, 0),0), # [1,1,R]
+                    [tf.shape(core)[0],tf.shape(core)[1],1]) # [N,N,R]
+        return var * core
 
     def Cholesky(self, X):
+        core = self._Kcore(X, X2=None) + \
+                    eye(tf.shape(X)[0]) * settings.numerics.jitter_level
+        chol = tf.cholesky(core)
+        var = tf.tile(tf.expand_dims(tf.expand_dims(
+                            tf.sqrt(self.variance), 0),0),
+                    [tf.shape(core)[0],tf.shape(core)[1],1])
+        return var * tf.tile(tf.expand_dims(chol, -1),[1,1,tf.shape(var)[2]])
+
+    def _Kcore(self, X, X2=None):
         """
-        Compute the cholesky decomposition for K(X).
-        Since this kernel is block diagonal, it can be computed very efficiently.
+        Returns
         """
-        return reduce(tf.add,
-            [tf.pad(
-                tf.cholesky(k.K(x) + self.jitter*eye(tf.shape(x)[0])),
-                    [[begin,X.shape[0]-begin-tf.shape(x)[0]],
-                     [begin,X.shape[0]-begin-tf.shape(x)[0]]])
-                for k,x,begin
-                in zip(self.kern_list, X, X.slice_begin)]
-            )
+        raise NotImplementedError
+
+class RBF(Stationary):
+    """
+    The radial basis function (RBF) or squared exponential kernel
+    """
+    def _Kcore(self, X, X2=None):
+        """
+        """
+        X, X2 = self._slice(X, X2)
+        return tf.exp(-self.square_dist(X, X2)/2)

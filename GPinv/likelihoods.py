@@ -4,7 +4,11 @@ from GPflow import transforms
 from GPflow.tf_wraps import eye
 from GPflow import likelihoods
 from . import densities
-from .param import MinibatchData, Param, DataHolder, Parameterized
+from .param import Param, Parameterized
+
+from GPflow._settings import settings
+float_type = settings.dtypes.float_type
+np_float_type = np.float32 if float_type is tf.float32 else np.float64
 
 class Likelihood(Parameterized):
     """
@@ -16,10 +20,48 @@ class Likelihood(Parameterized):
 
     def logp(self,F,Y):
         """
+        :param tf.tensor F: sized [N,n,R]
+        :param tf.tensor Y: sized [k,m]
+        where N is number of samples to approximate integration.
+              n is number of evaluation point for one latent function,
+              R is number of latent functions,
+              k, m., Dimension of the data
         Return the log density of the data given the function values.
         """
         raise NotImplementedError("implement the logp function\
                                   for this likelihood")
+
+    def sample_F(self, F):
+        """
+        :param tf.tensor F: sized [N,n,R]
+        :return tf.tensor : sized [k,m]
+        where N is number of samples to approximate integration.
+              n is number of evaluation point for one latent function,
+              R is number of latent functions,
+              k, m., Dimension of the data
+
+        Return function samples at the observation points.
+        This method is used to predict the function values at the data point.
+        """
+        raise NotImplementedError("implement the sample_F function\
+                                  for this likelihood")
+
+    def sample_Y(self, F):
+        """
+        :param tf.tensor F: sized [N,n,R]
+        :return tf.tensor : sized [k,m]
+        where N is number of samples to approximate integration.
+              n is number of evaluation point for one latent function,
+              R is number of latent functions,
+              k, m., Dimension of the data
+
+        Return samples from the predictive distribution of the data.
+        This method is used to predict the function values at the data point.
+        """
+        raise NotImplementedError("implement the sample_Y function\
+                                  for this likelihood")
+
+
 
 class Gaussian(Likelihood):
     def __init__(self):
@@ -33,3 +75,9 @@ class Gaussian(Likelihood):
         """
         Y = tf.tile(tf.expand_dims(Y, 0), [tf.shape(F)[0],1,1])
         return densities.gaussian(F, Y, self.variance)
+
+    def sample_F(self, F):
+        return F
+
+    def sample_Y(self, F):
+        return F + tf.sqrt(self.variance)*tf.random_normal(tf.shape(F), dtype=float_type)

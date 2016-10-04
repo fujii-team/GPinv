@@ -22,9 +22,9 @@ import numpy as np
 from GPflow.densities import gaussian
 from GPflow.model import GPModel
 from GPflow import transforms
-from GPflow.mean_functions import Zero
 from GPflow.tf_wraps import eye
 from GPflow._settings import settings
+from .mean_functions import Zero
 from .param import Param, DataHolder, MinibatchData
 from . import conditionals
 
@@ -33,7 +33,7 @@ class StVGP(GPModel):
     Stochastic approximation of the Variational Gaussian process
     """
     def __init__(self, X, Y, kern, likelihood,
-                 mean_function=Zero(), num_latent=None,
+                 mean_function=None, num_latent=None,
                  minibatch_size=None,
                  q_diag=False,
                  num_samples=20):
@@ -48,6 +48,8 @@ class StVGP(GPModel):
         self.num_data = X.shape[0] # number of data, n
         self.num_latent = num_latent or Y.shape[1] # number of latent function, R
         self.num_samples = num_samples # number of samples to approximate integration, N
+        if mean_function is None:
+            mean_function = Zero(self.num_latent)
         # if minibatch_size is not None, Y is stored as MinibatchData.
         # Note that X is treated as DataHolder.
         if minibatch_size is not None:

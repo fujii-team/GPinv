@@ -29,6 +29,8 @@ class GPMC(gpmc.GPMC):
     """
     def __init__(self, X, Y, kern, likelihood,
                  mean_function=None, num_latent=None):
+
+        num_latent = num_latent or Y.shape[1]
         if mean_function is None:
             mean_function = Zero(num_latent)
         gpmc.GPMC.__init__(self, X, Y, kern, likelihood, mean_function, num_latent)

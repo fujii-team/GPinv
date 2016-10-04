@@ -28,8 +28,9 @@ class GPMC(gpmc.GPMC):
     The same with GPflow.gpmc.GPMC, but can accept GPinv.kernels.Kern.
     """
     def __init__(self, X, Y, kern, likelihood,
-                 mean_function=Zero(), num_latent=None):
-        # assert likelihood is an instance of TransformedLikelihood
+                 mean_function=None, num_latent=None):
+        if mean_function is None:
+            mean_function = Zero(num_latent)
         gpmc.GPMC.__init__(self, X, Y, kern, likelihood, mean_function, num_latent)
 
     def build_likelihood(self):

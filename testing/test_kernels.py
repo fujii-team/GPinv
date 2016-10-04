@@ -1,6 +1,6 @@
 from __future__ import print_function
 import GPinv
-from GPinv.kernels import RBF,RBF_csym
+from GPinv.kernels import RBF,RBF_csym,RBF_casym,Stack
 import GPflow
 import numpy as np
 import unittest
@@ -44,15 +44,37 @@ class RefRBF_csym(RefRBF):
     def K(self, X, X2=None):
         if X2 is None:
             X2 = X
+        X2= np.abs(X2)
+        X = np.abs(X)
         return RefRBF.K(self,X,X2)+RefRBF.K(self,X,-X2)
 
     def Kdiag(self, X):
+        X = np.abs(X)
         K_diag = np.zeros((X.shape[0], self.kern.variance.value.shape[0]))
         for i in range(X.shape[0]):
             var = self.kern.variance.value
             x_dif = 2*X[i]/self.kern.lengthscales.value
             sq_dist = np.sum(x_dif*x_dif)
             K_diag[i,:] = var * (1.+np.exp(-0.5*sq_dist))
+        return K_diag
+
+
+class RefRBF_casym(RefRBF):
+    def K(self, X, X2=None):
+        if X2 is None:
+            X2 = X
+        X2= np.abs(X2)
+        X = np.abs(X)
+        return RefRBF.K(self,X,X2)-RefRBF.K(self,X,-X2)
+
+    def Kdiag(self, X):
+        X = np.abs(X)
+        K_diag = np.zeros((X.shape[0], self.kern.variance.value.shape[0]))
+        for i in range(X.shape[0]):
+            var = self.kern.variance.value
+            x_dif = 2*X[i]/self.kern.lengthscales.value
+            sq_dist = np.sum(x_dif*x_dif)
+            K_diag[i,:] = var * (1.-np.exp(-0.5*sq_dist))
         return K_diag
 
 
@@ -63,6 +85,7 @@ class test_rbf(unittest.TestCase):
         self.m = GPflow.param.Parameterized()
         self.m.kern = RBF(2, 3, var, ARD=True)
         self.m.kern_csym = RBF_csym(2, 3, var, ARD=True)
+        self.m.kern_casym = RBF_casym(2, 3, var, ARD=True)
         self.X  = rng.randn(10,2)
         self.X2 = rng.randn(11,2)
         # prepare Parameterized
@@ -128,71 +151,91 @@ class test_rbf(unittest.TestCase):
         for i in range(chol.shape[2]):
             self.assertTrue(np.allclose(K[:,:,i],
                         np.dot(chol[:,:,i], np.transpose(chol[:,:,i]))))
-'''
-class test_RBF_csym(unittest.TestCase):
-    """
-    Test for the cylindrically-symmetric RBF kernel
-    """
-    def test(self):
-        rng = np.random.RandomState(0)
-        # setting
-        X = rng.randn(10,2)
-        X2= rng.randn(12,2)
-        var = np.exp(rng.randn(1))
-        lengthscales = np.exp(rng.randn(2))
-        # constructing GPflow models
-        m = GPflow.model.Model()
-        m.kern = RBF_csym(2, ARD=True)
-        m.kern.variance = var
-        m.kern.lengthscales = lengthscales
-
-        m.X = GPflow.param.DataHolder(X)
-        m.X2= GPflow.param.DataHolder(X2)
-
-        tf_array = m.get_free_state()
-        m.make_tf_array(tf_array)
-        sess = tf.Session()
-        sess.run(tf.initialize_all_variables())
-        with m.tf_mode():
-            Kxx  = sess.run(m.kern.K(m.X), feed_dict = m.get_feed_dict())
-            Kxx2 = sess.run(m.kern.K(m.X, m.X2), feed_dict = m.get_feed_dict())
-            Kdiag= sess.run(m.kern.Kdiag(m.X), feed_dict = m.get_feed_dict())
-
-        # reference
-        Kxx_ref = np.zeros((X.shape[0],X.shape[0]))
-        Kxx2_ref = np.zeros((X.shape[0],X2.shape[0]))
-        Kdiag_ref = np.zeros(X.shape[0])
-        for i in range(X.shape[0]):
-            for j in range(X.shape[0]):
-                square_dist = 0
-                square_dist2 = 0
-                for k in range(X.shape[1]):
-                    square_dist += ((X[i,k] - X[j,k])/lengthscales[k])**2.
-                    square_dist2 += ((X[i,k] + X[j,k])/lengthscales[k])**2.
-                Kxx_ref[i,j] = var * np.exp(-0.5*square_dist) + \
-                               var * np.exp(-0.5*square_dist2)
-
-            for j in range(X2.shape[0]):
-                square_dist = 0
-                square_dist2 = 0
-                for k in range(X.shape[1]):
-                    square_dist += ((X[i,k] - X2[j,k])/lengthscales[k])**2.
-                    square_dist2 += ((X[i,k] + X2[j,k])/lengthscales[k])**2.
-                Kxx2_ref[i,j] = var * np.exp(-0.5*square_dist) + \
-                                var * np.exp(-0.5*square_dist2)
-
-            square_dist = 0
-            square_dist2 = 0
-            for k in range(X.shape[1]):
-                square_dist += ((X[i,k] - X[i,k])/lengthscales[k])**2.
-                square_dist2 += ((X[i,k] + X[i,k])/lengthscales[k])**2.
-            Kdiag_ref[i] = var * np.exp(-0.5*square_dist) + \
-                           var * np.exp(-0.5*square_dist2)
-
+    # ------ test for RBF_casym -----
+    def test_Kxx_casym(self):
+        with self.m.tf_mode():
+            Kxx  = self.sess.run(self.m.kern_casym.K(self.X))
+        ref_rbf = RefRBF_casym(self.m.kern)
+        Kxx_ref = ref_rbf.K(self.X)
         self.assertTrue(np.allclose(Kxx, Kxx_ref))
+
+    def test_Kxx2_casym(self):
+        with self.m.tf_mode():
+            Kxx2 = self.sess.run(self.m.kern_casym.K(self.X,self.X2))
+        ref_rbf = RefRBF_casym(self.m.kern)
+        Kxx2_ref = ref_rbf.K(self.X,self.X2)
         self.assertTrue(np.allclose(Kxx2, Kxx2_ref))
+
+    def test_Kdiag_casym(self):
+        with self.m.tf_mode():
+            Kdiag = self.sess.run(self.m.kern_casym.Kdiag(self.X))
+        ref_rbf = RefRBF_casym(self.m.kern)
+        Kdiag_ref = ref_rbf.Kdiag(self.X)
         self.assertTrue(np.allclose(Kdiag, Kdiag_ref))
-'''
+
+    def test_Cholesky_casym(self):
+        with self.m.tf_mode():
+            K = self.sess.run(self.m.kern_casym.K(self.X))
+            chol = self.sess.run(self.m.kern_casym.Cholesky(self.X))
+        for i in range(chol.shape[2]):
+            self.assertTrue(np.allclose(K[:,:,i],
+                        np.dot(chol[:,:,i], np.transpose(chol[:,:,i])),
+                        atol=1.0e-4))
+
+class test_stack(unittest.TestCase):
+    def setUp(self):
+        rng = np.random.RandomState(0)
+        var = np.exp(rng.randn(3))
+        self.m = GPflow.param.Parameterized()
+        self.kern1 = RBF(2, 3, var, ARD=True)
+        self.kern2 = RBF(2, 3, var, ARD=True)
+        self.kern3 = RBF_csym(2, 3, var, ARD=True)
+        self.m.kern =Stack([self.kern1,self.kern2,self.kern3,])
+        self.X  = rng.randn(10,2)
+        self.X2 = rng.randn(11,2)
+        # prepare Parameterized
+        tf_array = self.m.get_free_state()
+        self.m.make_tf_array(tf_array)
+        self.sess = tf.Session()
+        self.sess.run(tf.initialize_all_variables())
+
+    def test_Kxx(self):
+        with self.m.tf_mode():
+            Kxx  = self.sess.run(self.m.kern.K(self.X))
+        ref1 = RefRBF(self.kern1)
+        ref2 = RefRBF(self.kern2)
+        ref3 = RefRBF_csym(self.kern3)
+        self.assertTrue(np.allclose(Kxx[:,:,0:3], ref1.K(self.X)))
+        self.assertTrue(np.allclose(Kxx[:,:,3:6], ref2.K(self.X)))
+        self.assertTrue(np.allclose(Kxx[:,:,6:9], ref3.K(self.X)))
+
+    def test_Kxx2(self):
+        with self.m.tf_mode():
+            Kxx2 = self.sess.run(self.m.kern.K(self.X, self.X2))
+        ref1 = RefRBF(self.kern1)
+        ref2 = RefRBF(self.kern2)
+        ref3 = RefRBF_csym(self.kern3)
+        self.assertTrue(np.allclose(Kxx2[:,:,0:3], ref1.K(self.X, self.X2)))
+        self.assertTrue(np.allclose(Kxx2[:,:,3:6], ref2.K(self.X, self.X2)))
+        self.assertTrue(np.allclose(Kxx2[:,:,6:9], ref3.K(self.X, self.X2)))
+
+    def test_Kdiag(self):
+        with self.m.tf_mode():
+            Kdiag = self.sess.run(self.m.kern.Kdiag(self.X))
+        ref1 = RefRBF(self.kern1)
+        ref2 = RefRBF(self.kern2)
+        ref3 = RefRBF_csym(self.kern3)
+        self.assertTrue(np.allclose(Kdiag[:,0:3], ref1.Kdiag(self.X)))
+        self.assertTrue(np.allclose(Kdiag[:,3:6], ref2.Kdiag(self.X)))
+        self.assertTrue(np.allclose(Kdiag[:,6:9], ref3.Kdiag(self.X)))
+
+    def test_Cholesky(self):
+        with self.m.tf_mode():
+            Kxx  = self.sess.run(self.m.kern.K(self.X))
+            chol = self.sess.run(self.m.kern.Cholesky(self.X))
+        for i in range(chol.shape[2]):
+            self.assertTrue(np.allclose(Kxx[:,:,i],
+                        np.dot(chol[:,:,i], np.transpose(chol[:,:,i]))))
 
 
 

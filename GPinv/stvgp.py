@@ -115,7 +115,7 @@ class StVGP(GPModel):
         v_samples = tf.random_normal([R,N,n,1], dtype=tf.float64)
         # Match dimension of the posterior mean, [R,N,n,1]
         mu = tf.tile(tf.expand_dims(tf.expand_dims(
-                                tf.transpose(self.q_mu), 1), -1), [1,R,1,1])
+                                tf.transpose(self.q_mu), 1), -1), [1,N,1,1])
         u_samples = mu + tf.batch_matmul(sqrt, v_samples)
         # Stochastic approximation of the Kulback_leibler KL[q(f)||p(f)]
         KL = - 0.5 * logdet_S\

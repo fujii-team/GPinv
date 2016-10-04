@@ -53,8 +53,8 @@ class test_vgp(unittest.TestCase):
         print(mu_ref.flatten())
         print(var.flatten())
         print(var_ref.flatten())
-        self.assertTrue(np.allclose(mu, mu_ref, atol=0.01))
-        self.assertTrue(np.allclose(var, var_ref, atol=0.001))
+        self.assertTrue(np.allclose(mu, mu_ref, atol=0.03))
+        self.assertTrue(np.allclose(var, var_ref, atol=0.003))
 
 
 

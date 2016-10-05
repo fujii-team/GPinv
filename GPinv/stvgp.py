@@ -26,7 +26,7 @@ from GPflow.param import AutoFlow
 from GPflow.tf_wraps import eye
 from GPflow._settings import settings
 from .mean_functions import Zero
-from .param import Param, DataHolder, MinibatchData
+from .param import Param, DataHolder
 from . import conditionals
 float_type = settings.dtypes.float_type
 np_float_type = np.float32 if float_type is tf.float32 else np.float64

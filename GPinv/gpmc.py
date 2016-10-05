@@ -20,6 +20,7 @@ import tensorflow as tf
 from GPflow import gpmc
 from GPflow.likelihoods import Likelihood
 from GPflow.tf_wraps import eye
+from GPflow.param import AutoFlow
 from .mean_functions import Zero
 from . import conditionals
 
@@ -28,8 +29,11 @@ class GPMC(gpmc.GPMC):
     The same with GPflow.gpmc.GPMC, but can accept GPinv.kernels.Kern.
     """
     def __init__(self, X, Y, kern, likelihood,
-                 mean_function=Zero(), num_latent=None):
-        # assert likelihood is an instance of TransformedLikelihood
+                 mean_function=None, num_latent=None):
+
+        num_latent = num_latent or Y.shape[1]
+        if mean_function is None:
+            mean_function = Zero(num_latent)
         gpmc.GPMC.__init__(self, X, Y, kern, likelihood, mean_function, num_latent)
 
     def build_likelihood(self):
@@ -38,16 +42,41 @@ class GPMC(gpmc.GPMC):
         model.
             \log p(Y, V | theta).
         """
+        f = self._get_f() # [1,n,R]
+        return tf.reduce_sum(self.likelihood.logp(f, self.Y))
+
+    def build_predict(self, Xnew, full_cov=False):
+        mu, var = conditionals.conditional(Xnew, self.X, self.kern, self.V,
+                                   q_sqrt=None, full_cov=full_cov, whiten=True)
+        return mu + self.mean_function(Xnew), var
+
+    @AutoFlow()
+    def sample_F(self):
+        """
+        Get samples of the latent function values at the observation points.
+        :param integer n_sample: number of samples.
+        :return tf.tensor: Samples sized [n,R]
+        """
+        return self.likelihood.sample_F(self._get_f())
+
+    @AutoFlow((tf.int32, []))
+    def sample_Y(self, n_sample):
+        """
+        Get samples of the latent function values at the observation points.
+        :param integer n_sample: number of samples.
+        :return tf.tensor: Samples sized [N,n,R]
+        """
+        return self.likelihood.sample_Y(self._get_f())
+
+    def _get_f(self):
+        """
+        Calculate GP function f from the current latent variables V and
+        hyperparameters.
+        """
         L = self.kern.Cholesky(self.X) # size [R,n,n]
         F = tf.transpose(tf.squeeze(   # size [n,R]
             tf.batch_matmul(
                 tf.transpose(L,[2,0,1]), # [n,n,R] -> [R,n,n]
                 tf.expand_dims(tf.transpose(self.V), -1)),[-1]))\
                                     + self.mean_function(self.X)
-        # TransformedLikelihood shoule have logp_gpmc method.
-        return tf.reduce_sum(self.likelihood.logp(tf.expand_dims(F,0), self.Y))
-
-    def build_predict(self, Xnew, full_cov=False):
-        mu, var = conditionals.conditional(Xnew, self.X, self.kern, self.V,
-                                   q_sqrt=None, full_cov=full_cov, whiten=True)
-        return mu + self.mean_function(Xnew), var
+        return tf.expand_dims(F, 0) # size [1,n,R]

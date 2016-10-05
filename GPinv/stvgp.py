@@ -22,38 +22,38 @@ import numpy as np
 from GPflow.densities import gaussian
 from GPflow.model import GPModel
 from GPflow import transforms
-from GPflow.mean_functions import Zero
+from GPflow.param import AutoFlow
 from GPflow.tf_wraps import eye
 from GPflow._settings import settings
+from .mean_functions import Zero
 from .param import Param, DataHolder, MinibatchData
 from . import conditionals
+float_type = settings.dtypes.float_type
+np_float_type = np.float32 if float_type is tf.float32 else np.float64
 
 class StVGP(GPModel):
     """
     Stochastic approximation of the Variational Gaussian process
     """
     def __init__(self, X, Y, kern, likelihood,
-                 mean_function=Zero(), num_latent=None,
-                 minibatch_size=None,
+                 mean_function=None, num_latent=None,
                  q_diag=False,
                  num_samples=20):
         """
         X is a data matrix, size N x D
         Y is a data matrix, size N x R
         kern, likelihood, mean_function are appropriate GPflow objects
-        minibatch_size: if not None, minibatching is enabled ONLY for Y.
         q_diag: True for diagonal approximation of q.
         num_samples: number of samples to approximate the posterior.
         """
         self.num_data = X.shape[0] # number of data, n
         self.num_latent = num_latent or Y.shape[1] # number of latent function, R
         self.num_samples = num_samples # number of samples to approximate integration, N
+        if mean_function is None:
+            mean_function = Zero(self.num_latent)
         # if minibatch_size is not None, Y is stored as MinibatchData.
         # Note that X is treated as DataHolder.
-        if minibatch_size is not None:
-            Y = MinibatchData(Y)
-        else:
-            Y = DataHolder(Y, on_shape_change='recompile')
+        Y = DataHolder(Y, on_shape_change='recompile')
         X = DataHolder(X, on_shape_change='recompile')
         GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
         # variational parameter.
@@ -96,7 +96,53 @@ class StVGP(GPModel):
         This method computes the variational lower bound on the likelihood, with
         stochastic approximation.
         """
-        N = self.num_samples
+        f_samples = self._sample(self.num_samples)
+        # In likelihood, dimensions of f_samples and self.Y must be matched.
+        lik = tf.reduce_sum(self.likelihood.logp(f_samples, self.Y))
+        return (lik - self._KL)/self.num_samples
+
+    def build_predict(self, Xnew, full_cov=False):
+        """
+        Prediction of the latent functions.
+        The posterior is approximated by multivariate Gaussian distribution.
+
+        :param tf.tensor Xnew: Coordinate where the prediction should be made.
+        :param bool full_cov: True for return full covariance.
+        :return tf.tensor mean: The posterior mean sized [n,R]
+        :return tf.tensor var: The posterior mean sized [n,R] for full_cov=False
+                                                      [n,n,R] for full_cov=True.
+        """
+        mu, var = conditionals.conditional(Xnew, self.X, self.kern, self.q_mu,
+                                           q_sqrt=self.q_sqrt, full_cov=full_cov, whiten=True)
+        return mu + self.mean_function(Xnew), var
+
+    @AutoFlow((tf.int32, []))
+    def sample_F(self, n_sample):
+        """
+        Get samples of the latent function values at the observation points.
+        :param integer n_sample: number of samples.
+        :return tf.tensor: Samples sized [N,n,R]
+        """
+        f_samples = self._sample(n_sample[0])
+        return self.likelihood.sample_F(f_samples)
+
+    @AutoFlow((tf.int32, []))
+    def sample_Y(self, n_sample):
+        """
+        Get samples of the latent function values at the observation points.
+        :param integer n_sample: number of samples.
+        :return tf.tensor: Samples sized [N,n,R]
+        """
+        f_samples = self._sample(n_sample[0])
+        return self.likelihood.sample_Y(f_samples)
+
+    def _sample(self, N):
+        """
+        :param integer N: number of samples
+        :Returns
+         samples picked from the variational posterior.
+         The Kulback_leibler divergence is stored as self._KL
+        """
         n = self.num_data
         R = self.num_latent
         # Match dimension of the posterior variance to the data.
@@ -106,17 +152,17 @@ class StVGP(GPModel):
             sqrt = tf.batch_matrix_band_part(
                             tf.transpose(self.q_sqrt,[2,0,1]), -1, 0) # [R,n,n]
         # Log determinant of matrix S = q_sqrt * q_sqrt^T
-        logdet_S = 2.0*N*tf.reduce_sum(
-                tf.log(tf.abs(tf.batch_matrix_diag_part(sqrt))))
+        logdet_S = tf.cast(N, float_type)*tf.reduce_sum(
+                tf.log(tf.square(tf.batch_matrix_diag_part(sqrt))))
         sqrt = tf.tile(tf.expand_dims(sqrt, 1), [1,N,1,1]) # [R,N,n,n]
         # noraml random samples, [R,N,n,1]
-        v_samples = tf.random_normal([R,N,n,1], dtype=tf.float64)
+        v_samples = tf.random_normal([R,N,n,1], dtype=float_type)
         # Match dimension of the posterior mean, [R,N,n,1]
         mu = tf.tile(tf.expand_dims(tf.expand_dims(
-                                tf.transpose(self.q_mu), 1), -1), [1,R,1,1])
+                                tf.transpose(self.q_mu), 1), -1), [1,N,1,1])
         u_samples = mu + tf.batch_matmul(sqrt, v_samples)
         # Stochastic approximation of the Kulback_leibler KL[q(f)||p(f)]
-        KL = - 0.5 * logdet_S\
+        self._KL = - 0.5 * logdet_S\
              - 0.5 * tf.reduce_sum(tf.square(v_samples)) \
              + 0.5 * tf.reduce_sum(tf.square(u_samples))
         # Cholesky factor of kernel [R,N,n,n]
@@ -130,12 +176,5 @@ class StVGP(GPModel):
         f_samples = tf.transpose(
                 tf.squeeze(tf.batch_matmul(L, u_samples),[-1]), # [R,N,n]
                 [1,2,0]) + mean
-        # In likelihood, dimensions of f_samples and self.Y must be matched.
-        lik = tf.reduce_sum(self.likelihood.logp(f_samples, self.Y))
-        return (lik - KL)/self.num_samples
-
-
-    def build_predict(self, Xnew, full_cov=False):
-        mu, var = conditionals.conditional(Xnew, self.X, self.kern, self.q_mu,
-                                           q_sqrt=self.q_sqrt, full_cov=full_cov, whiten=True)
-        return mu + self.mean_function(Xnew), var
+        # return as Dict to deal with
+        return f_samples

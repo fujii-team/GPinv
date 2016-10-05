@@ -53,9 +53,21 @@ class test_vgp(unittest.TestCase):
         print(mu_ref.flatten())
         print(var.flatten())
         print(var_ref.flatten())
-        self.assertTrue(np.allclose(mu, mu_ref, atol=0.01))
-        self.assertTrue(np.allclose(var, var_ref, atol=0.001))
+        self.assertTrue(np.allclose(mu, mu_ref, atol=0.03))
+        self.assertTrue(np.allclose(var, var_ref, atol=0.003))
 
+    def test_samples(self):
+        # tested StVGP
+        tf.set_random_seed(1)
+        m = GPinv.stvgp.StVGP(self.X.reshape(-1,1), self.Y.reshape(-1,1),
+                    kern = GPinv.kernels.RBF(1,output_dim=1),
+                    likelihood=GPinv.likelihoods.Gaussian())
+        # get samples
+        num_samples = 10
+        f_samples = m.sample_F(num_samples)
+        self.assertTrue(np.allclose(f_samples.shape, [num_samples,self.X.shape[0], 1]))
+        y_samples = m.sample_Y(num_samples)
+        self.assertTrue(np.allclose(y_samples.shape, [num_samples,self.X.shape[0], 1]))
 
 
 if __name__ == '__main__':

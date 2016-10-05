@@ -62,7 +62,6 @@ class Likelihood(Parameterized):
                                   for this likelihood")
 
 
-
 class Gaussian(Likelihood):
     def __init__(self):
         Likelihood.__init__(self)

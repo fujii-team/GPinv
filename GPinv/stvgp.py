@@ -96,10 +96,10 @@ class StVGP(GPModel):
         This method computes the variational lower bound on the likelihood, with
         stochastic approximation.
         """
-        f_samples, KL = self.get_samples_and_KL(self.num_samples)
+        f_samples = self._sample(self.num_samples)
         # In likelihood, dimensions of f_samples and self.Y must be matched.
         lik = tf.reduce_sum(self.likelihood.logp(f_samples, self.Y))
-        return (lik - KL)/self.num_samples
+        return (lik - self._KL)/self.num_samples
 
     def build_predict(self, Xnew, full_cov=False):
         """
@@ -123,7 +123,7 @@ class StVGP(GPModel):
         :param integer n_sample: number of samples.
         :return tf.tensor: Samples sized [N,n,R]
         """
-        f_samples, KL = self.get_samples_and_KL(n_sample[0])
+        f_samples = self._sample(n_sample[0])
         return self.likelihood.sample_F(f_samples)
 
     @AutoFlow((tf.int32, []))
@@ -133,15 +133,15 @@ class StVGP(GPModel):
         :param integer n_sample: number of samples.
         :return tf.tensor: Samples sized [N,n,R]
         """
-        f_samples, KL = self.get_samples_and_KL(n_sample[0])
+        f_samples = self._sample(n_sample[0])
         return self.likelihood.sample_Y(f_samples)
 
-    def get_samples_and_KL(self, N):
+    def _sample(self, N):
         """
         :param integer N: number of samples
         :Returns
          samples picked from the variational posterior.
-         Kulback_leibler divergence of the posterior.
+         The Kulback_leibler divergence is stored as self._KL
         """
         n = self.num_data
         R = self.num_latent
@@ -152,8 +152,8 @@ class StVGP(GPModel):
             sqrt = tf.batch_matrix_band_part(
                             tf.transpose(self.q_sqrt,[2,0,1]), -1, 0) # [R,n,n]
         # Log determinant of matrix S = q_sqrt * q_sqrt^T
-        logdet_S = 2.0*tf.cast(N, float_type)*tf.reduce_sum(
-                tf.log(tf.abs(tf.batch_matrix_diag_part(sqrt))))
+        logdet_S = tf.cast(N, float_type)*tf.reduce_sum(
+                tf.log(tf.square(tf.batch_matrix_diag_part(sqrt))))
         sqrt = tf.tile(tf.expand_dims(sqrt, 1), [1,N,1,1]) # [R,N,n,n]
         # noraml random samples, [R,N,n,1]
         v_samples = tf.random_normal([R,N,n,1], dtype=float_type)
@@ -162,7 +162,7 @@ class StVGP(GPModel):
                                 tf.transpose(self.q_mu), 1), -1), [1,N,1,1])
         u_samples = mu + tf.batch_matmul(sqrt, v_samples)
         # Stochastic approximation of the Kulback_leibler KL[q(f)||p(f)]
-        KL = - 0.5 * logdet_S\
+        self._KL = - 0.5 * logdet_S\
              - 0.5 * tf.reduce_sum(tf.square(v_samples)) \
              + 0.5 * tf.reduce_sum(tf.square(u_samples))
         # Cholesky factor of kernel [R,N,n,n]
@@ -176,4 +176,5 @@ class StVGP(GPModel):
         f_samples = tf.transpose(
                 tf.squeeze(tf.batch_matmul(L, u_samples),[-1]), # [R,N,n]
                 [1,2,0]) + mean
-        return f_samples, KL
+        # return as Dict to deal with
+        return f_samples

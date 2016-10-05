@@ -34,31 +34,9 @@ class test_gpmc(unittest.TestCase):
         m.sample(10, verbose=True, epsilon=0.12, Lmax=15)
         Xnew = np.linspace(0.,1.,22)
         mu, var = m.predict_f(Xnew.reshape(-1,1))
-        # Stochastic optimization by tf.train
-        """print(rslt['fun'], rslt_ref['fun'])
-        self.assertTrue(np.allclose(rslt['fun'], rslt_ref['fun'], atol=0.5))
-        print(m.kern)
-        print(m_ref.kern)
-        print(m.likelihood)
-        print(m_ref.likelihood)
-        self.assertTrue(np.allclose(
-            m.kern.lengthscales.value, m_ref.kern.lengthscales.value, rtol=0.2))
-        self.assertTrue(np.allclose(
-            m.kern.variance.value, m_ref.kern.variance.value, rtol=0.4))
-        self.assertTrue(np.allclose(
-            m.likelihood.variance.value, m_ref.likelihood.variance.value, rtol=0.2))
-        # test prediction
-        Xnew = np.linspace(0.,1.,22)
-        mu, var = m.predict_f(Xnew.reshape(-1,1))
-        mu_ref, var_ref = m_ref.predict_f(Xnew.reshape(-1,1))
-        print(mu.flatten())
-        print(mu_ref.flatten())
-        print(var.flatten())
-        print(var_ref.flatten())
-        self.assertTrue(np.allclose(mu, mu_ref, atol=0.01))
-        self.assertTrue(np.allclose(var, var_ref, atol=0.001))
-        """
-
+        # Just call sample_F and sample_Y
+        f_sample = m.sample_F(1)
+        y_sample = m.sample_Y(1)
 
 if __name__ == '__main__':
     unittest.main()

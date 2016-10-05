@@ -21,10 +21,11 @@ Currently, GPinv supports
 + Stochastic Variational Gaussian Process solver (StVGP).
 + Markov Chain Monte-Carlo method (GPMC).
 
-The theoretical background for StVGP can be found in [(Notebook)](notebooks/StVGP_notes.ipynb)
+The theoretical background for StVGP can be found in [Notebook (coming soon)](notebooks/StVGP_notes.ipynb)
 
 For the usage, see the following examples,  
 [Abel's inversion](notebooks/Abel_inversion.ipynb)  
+[Spectroscopic extension of Abel's inversion](notebooks/Spectroscopic_Abel_inversion.ipynb)  
 
 
 ## Dependencies

@@ -165,5 +165,72 @@ class test_optimize(unittest.TestCase):
         print(gslot_local2)
         self.assertTrue(np.allclose(gslot_local, gslot_local2))
 
+    def test_local_train_var_fixed(self):
+        method_global = tf.train.AdamOptimizer(learning_rate=0.01)
+        method_local  = tf.train.AdamOptimizer(learning_rate=0.01)
+        self.m.x.fixed=True
+        self.m.optimize(method_global, maxiter=10)
+        gslot_local = self.m._session.run(method_global.get_slot(self.m._free_local_vars, 'm'))
+        self.m.set_local_train_var(gslot_local, 'm')
+        # make sure the train_var is stored LocalParam._train_var
+        print(self.m.x._train_var)
+        self.assertTrue('m' in self.m.x._train_var.keys())
+        # make sure the local_train_var is restored by get_local_train_var
+        gslot_local2 = self.m.get_local_train_var('m')
+        print(gslot_local2)
+        self.assertTrue(np.allclose(gslot_local, gslot_local2))
+
+
+class KeyboardRaiser:
+    """
+    This wraps a function and makes it raise a KeyboardInterrupt after some number of calls
+    """
+    def __init__(self, iters_to_raise, f):
+        self.iters_to_raise, self.f = iters_to_raise, f
+        self.count = 0
+
+    def __call__(self, *a, **kw):
+        self.count += 1
+        if self.count >= self.iters_to_raise:
+            raise KeyboardInterrupt
+        return self.f(*a, **kw)
+
+class TestKeyboardCatching(unittest.TestCase):
+    def setUp(self):
+        self.m = Quadratic()
+
+    def test_optimize_np(self):
+        x0 = self.m.get_free_state()
+        self.m._compile()
+        self.m._objective = KeyboardRaiser(5, self.m._objective)
+        self.m.optimize(disp=0, maxiter=10000, ftol=0, gtol=0)
+        x1 = self.m.get_free_state()
+        self.assertFalse(np.allclose(x0, x1))
+
+    def test_optimize_tf(self):
+        x0 = self.m.get_free_state()
+        callback = KeyboardRaiser(5, lambda x: None)
+        o = tf.train.AdamOptimizer()
+        self.m.optimize(o, maxiter=15, callback=callback)
+        x1 = self.m.get_free_state()
+        self.assertFalse(np.allclose(x0, x1))
+
+    def test_optimize_local_np(self):
+        x0 = self.m.get_local_free_state()
+        self.m._compile()
+        self.m._objective = KeyboardRaiser(5, self.m._objective)
+        self.m.optimize_local(disp=0, maxiter=10000, ftol=0, gtol=0)
+        x1 = self.m.get_local_free_state()
+        self.assertFalse(np.allclose(x0, x1))
+
+    def test_optimize_local_tf(self):
+        x0 = self.m.get_local_free_state()
+        callback = KeyboardRaiser(5, lambda x: None)
+        o = tf.train.AdamOptimizer()
+        self.m.optimize_local(o, maxiter=15, callback=callback)
+        x1 = self.m.get_local_free_state()
+        self.assertFalse(np.allclose(x0, x1))
+
+
 if __name__ == '__main__':
     unittest.main()

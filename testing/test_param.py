@@ -58,26 +58,6 @@ class test_Param(unittest.TestCase):
         self.assertTrue(np.allclose(
             local_feed_dict[self.m.m.d2._tf_array], self.d2))
 
-    """
-    global_feed_dict is deprecated
-    def test_global_feed_dict(self):
-        self.m.make_tf_array(self.m.get_free_state())
-        global_feed_dict = self.m.get_global_feed_dict()
-        # check if global parameter is NOT contained in feed_dict
-        self.assertFalse(self.m.global_p1._tf_array in global_feed_dict.keys())
-        self.assertFalse(self.m.m.global_p2._tf_array in global_feed_dict.keys())
-        # check if local parameter is contained in feed_dict
-        self.assertTrue(self.m.local_p1._tf_array in global_feed_dict.keys())
-        self.assertTrue(self.m.m.local_p2._tf_array in global_feed_dict.keys())
-        # check if dataholder is contained in feed_dict
-        self.assertTrue(self.m.d1._tf_array in global_feed_dict.keys())
-        self.assertTrue(self.m.m.d2._tf_array in global_feed_dict.keys())
-        self.assertTrue(np.allclose(
-            global_feed_dict[self.m.d1._tf_array], self.d1))
-        self.assertTrue(np.allclose(
-            global_feed_dict[self.m.m.d2._tf_array], self.d2))
-    """
-
     def test_set_local_state(self):
         rng = np.random.RandomState(1)
         local_state = self.m.get_local_free_state()
@@ -89,6 +69,12 @@ class test_Param(unittest.TestCase):
         self.assertTrue(np.allclose(self.m.global_p1.value, self.global_p1))
         self.assertTrue(np.allclose(self.m.m.global_p2.value, self.global_p2))
 
+    def test_set_local_state_2(self):
+        # get size of all the LocalParam in the model.
+        param_size = len(self.local_p1.flatten()) + len(self.local_p2.flatten())
+        self.m.set_local_state(np.zeros(param_size))
+        self.assertTrue(np.allclose(self.m.local_p1.value, np.zeros((self.local_p1.shape))))
+
     def test_set_global_state(self):
         rng = np.random.RandomState(1)
         global_state = self.m.get_global_free_state()
@@ -99,6 +85,12 @@ class test_Param(unittest.TestCase):
         # global parameters should not be changed
         self.assertFalse(np.allclose(self.m.global_p1.value, self.global_p1))
         self.assertFalse(np.allclose(self.m.m.global_p2.value, self.global_p2))
+
+    def test_set_global_state_2(self):
+        # get size of all the Param except for LocalParam in the model.
+        param_size = len(self.global_p1.flatten()) + len(self.global_p2.flatten())
+        self.m.set_global_state(np.zeros(param_size))
+        self.assertTrue(np.allclose(self.m.global_p1.value, np.zeros((self.global_p1.shape))))
 
     def test_get_local_params(self):
         local_params = self.m.get_local_params()

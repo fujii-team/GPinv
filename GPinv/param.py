@@ -44,11 +44,6 @@ def set_local_methods(self, child):
 
     # for Parameterized instance.
     elif isinstance(child, param.Parameterized):
-        '''
-        # Append set_attribute
-        child.__setattr__ = types.MethodType(
-            set_attribute, child)
-        '''
         # Append this 'set_local_methods' first.
         child.set_local_methods = types.MethodType(set_local_methods, child)
         # Next append some local methods.
@@ -65,24 +60,10 @@ def set_local_methods(self, child):
         # get_local_params
         child.get_local_params = types.MethodType(get_local_params, child)
         # set_local_data
-        child.get_local_data = types.MethodType(get_local_data, child)
+        #child.get_local_data = types.MethodType(get_local_data, child)
         # get_local_auxil_var
         child.set_local_train_var = types.MethodType(set_local_train_var, child)
         child.get_local_train_var = types.MethodType(get_local_train_var, child)
-
-'''
-# TODO It may be possible to append local method when instances is added.
-def set_attribute(self, key, value):
-    # call default __setattr__ method
-    super.__setattr__(self, key, value)
-    # additionally, if the key is Parameterized, then add all the local method
-    # recursively to its child class.
-    if isinstance(key, Parameterized):
-        for p in self.sorted_params:
-            if isinstance(p, (Param, Parameterized)) and \
-                not hasattr(p, set_attribute(self, key, value)):
-                set_local_methods(self, p)
-'''
 
 def get_local_feed_dict(self):
     """
@@ -213,6 +194,7 @@ def get_local_params(self):
             local_params=local_params+p.get_local_params()
     return local_params
 
+'''
 def get_local_data(self):
     """
     Get list of instances of LocalDataHolder in this and child classes recursively.
@@ -228,6 +210,7 @@ def get_local_data(self):
         elif isinstance(p, param.Parameterized):
             local_data.append(p.get_local_data())
     return local_data
+'''
 
 def set_local_train_var(self, x, name):
     """
@@ -288,7 +271,7 @@ class LocalParam(param.Param):
         Returns the size of the free parameter.
          """
         if self.fixed:
-            self._auxil_var[name] = np.empty((0,), np_float_type)
+            self._train_var[name] = np.empty((0,), np_float_type)
             return 0
         free_size = self.transform.free_state_size(self.shape)
         self._train_var[name] = x[:free_size].reshape(self.shape)
@@ -310,12 +293,14 @@ class GlobalParam(param.Param):
     """
     pass
 
+'''
 class LocalDataHolder(param.DataHolder):
     """
     Simply wrap GPflow.param.DataHolder so that LocalDataManager can distinguish
     it from global DataHolder
     """
     pass
+'''
 
 class HierarchicParameterized(param.Parameterized):
     """

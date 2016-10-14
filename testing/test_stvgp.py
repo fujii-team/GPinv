@@ -69,6 +69,18 @@ class test_vgp(unittest.TestCase):
         y_samples = m.sample_Y(num_samples)
         self.assertTrue(np.allclose(y_samples.shape, [num_samples,self.X.shape[0], 1]))
 
+    def test_KL_analytic(self):
+        """
+        Test option for stvgp.KL_analytic
+        """
+        m = GPinv.stvgp.StVGP(self.X.reshape(-1,1), self.Y.reshape(-1,1),
+                    GPinv.kernels.RBF(1,output_dim=1),
+                    GPinv.likelihoods.Gaussian(),
+                    KL_analytic = True)
+        trainer = tf.train.AdamOptimizer(learning_rate=0.002)
+        # Stochastic optimization by tf.train
+        rslt = m.optimize(trainer, maxiter=3000)
+
 
 if __name__ == '__main__':
     unittest.main()

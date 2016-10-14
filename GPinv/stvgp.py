@@ -21,7 +21,7 @@ import tensorflow as tf
 import numpy as np
 from GPflow.densities import gaussian
 from GPflow.model import GPModel
-from GPflow import transforms
+from GPflow import transforms,kullback_leiblers
 from GPflow.param import AutoFlow
 from GPflow.tf_wraps import eye
 from GPflow._settings import settings
@@ -38,12 +38,14 @@ class StVGP(GPModel):
     def __init__(self, X, Y, kern, likelihood,
                  mean_function=None, num_latent=None,
                  q_diag=False,
+                 KL_analytic=False,
                  num_samples=20):
         """
         X is a data matrix, size N x D
         Y is a data matrix, size N x R
         kern, likelihood, mean_function are appropriate GPflow objects
         q_diag: True for diagonal approximation of q.
+        KL_analytic: True for the use of the analytical expression for KL.
         num_samples: number of samples to approximate the posterior.
         """
         self.num_data = X.shape[0] # number of data, n
@@ -69,9 +71,9 @@ class StVGP(GPModel):
             q_sqrt = np.array([np.eye(self.num_data)
                                 for _ in range(self.num_latent)]).swapaxes(0, 2)
             self.q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform                              transforms.positive)
+        self.KL_analytic = KL_analytic
 
-
-    def _compile(self, optimizer=None):
+    def _compile(self, optimizer=None, **kw):
         """
         Before calling the standard compile function, check to see if the size
         of the data has changed and add variational parameters appropriately.
@@ -89,7 +91,7 @@ class StVGP(GPModel):
                 q_sqrt = np.array([np.eye(self.num_data)
                                     for _ in range(self.num_latent)]).swapaxes(0, 2)
                 self.q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform                              transforms.positive)
-        return super(StVGP, self)._compile(optimizer=optimizer)
+        return super(StVGP, self)._compile(optimizer=optimizer, **kw)
 
     def build_likelihood(self):
         """
@@ -99,7 +101,10 @@ class StVGP(GPModel):
         f_samples = self._sample(self.num_samples)
         # In likelihood, dimensions of f_samples and self.Y must be matched.
         lik = tf.reduce_sum(self.likelihood.logp(f_samples, self.Y))
-        return (lik - self._KL)/self.num_samples
+        if not self.KL_analytic:
+            return (lik - self._KL)/self.num_samples
+        else:
+            return lik/self.num_samples - self._analytical_KL()
 
     def build_predict(self, Xnew, full_cov=False):
         """
@@ -178,3 +183,13 @@ class StVGP(GPModel):
                 [1,2,0]) + mean
         # return as Dict to deal with
         return f_samples
+
+    def _analytical_KL(self):
+        """
+        Analytically evaluate KL
+        """
+        if self.q_diag:
+            KL = kullback_leiblers.gauss_kl_white_diag(self.q_mu, self.q_sqrt)
+        else:
+            KL = kullback_leiblers.gauss_kl_white(self.q_mu, self.q_sqrt)
+        return KL

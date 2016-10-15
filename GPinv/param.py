@@ -3,6 +3,7 @@ import numpy as np
 import types
 import sys
 from GPflow import param
+from GPflow import svgp
 #from GPflow.param import Parentable, Param, Parameterized, DataHolder
 from GPflow.scoping import NameScoped
 from GPflow import transforms
@@ -21,6 +22,9 @@ class Parameterized(param.Parameterized):
     pass
 
 class ParamList(param.ParamList):
+    pass
+
+class MinibatchData(svgp.MinibatchData):
     pass
 
 """

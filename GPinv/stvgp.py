@@ -195,28 +195,26 @@ class StVGP(GPModel):
         # Log determinant of matrix S = q_sqrt * q_sqrt^T
         logdet_S = tf.cast(N, float_type)*tf.reduce_sum(
                 tf.log(tf.square(tf.batch_matrix_diag_part(sqrt))))
-        sqrt = tf.tile(tf.expand_dims(sqrt, 1), [1,N,1,1]) # [R,N,n,n]
-        # noraml random samples, [R,N,n,1]
-        v_samples = tf.random_normal([R,N,n,1], dtype=float_type)
-        # Match dimension of the posterior mean, [R,N,n,1]
-        mu = tf.tile(tf.expand_dims(tf.expand_dims(
-                                tf.transpose(self.q_mu), 1), -1), [1,N,1,1])
+        sqrt = tf.tile(sqrt, [1,1,1]) # [R,n,n]
+        # noraml random samples, [R,n,N]
+        v_samples = tf.random_normal([R,n,N], dtype=float_type)
+        # Match dimension of the posterior mean, [R,n,N]
+        mu = tf.tile(tf.expand_dims(tf.transpose(self.q_mu), -1), [1,1,N])
         u_samples = mu + tf.batch_matmul(sqrt, v_samples)
         # Stochastic approximation of the Kulback_leibler KL[q(f)||p(f)]
         self._KL = - 0.5 * logdet_S\
              - 0.5 * tf.reduce_sum(tf.square(v_samples)) \
              + 0.5 * tf.reduce_sum(tf.square(u_samples))
-        # Cholesky factor of kernel [R,N,n,n]
-        L = tf.tile(tf.expand_dims(
-                tf.transpose(self.kern.Cholesky(self.X), [2,0,1]),1), [1,N,1,1])
+        # Cholesky factor of kernel [R,n,n]
+        L = tf.transpose(self.kern.Cholesky(self.X), [2,0,1])
         # mean, sized [N,n,R]
         mean = tf.tile(tf.expand_dims(
                     self.mean_function(self.X),
                 0), [N,1,1])
         # sample from posterior, [N,n,R]
         f_samples = tf.transpose(
-                tf.squeeze(tf.batch_matmul(L, u_samples),[-1]), # [R,N,n]
-                [1,2,0]) + mean
+                    tf.batch_matmul(L, u_samples), # [R,n,N]
+                [2,1,0]) + mean
         # return as Dict to deal with
         return f_samples
 

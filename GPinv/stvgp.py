@@ -37,14 +37,14 @@ class StVGP(GPModel):
     """
     def __init__(self, X, Y, kern, likelihood,
                  mean_function=None, num_latent=None,
-                 q_diag=False,
+                 q_shape='fullrank',
                  KL_analytic=False,
                  num_samples=20):
         """
-        X is a data matrix, size N x D
-        Y is a data matrix, size N x R
+        X is a data matrix, size n x D
+        Y is a data matrix, size n x R
         kern, likelihood, mean_function are appropriate GPflow objects
-        q_diag: True for diagonal approximation of q.
+        q_shape: 'fullrank', 'diagonal', or integer less than n.
         KL_analytic: True for the use of the analytical expression for KL.
         num_samples: number of samples to approximate the posterior.
         """
@@ -62,15 +62,26 @@ class StVGP(GPModel):
         # Mean of the posterior
         self.q_mu = Param(np.zeros((self.num_data, self.num_latent)))
         # If true, mean-field approimation is made.
-        self.q_diag = q_diag
+        self.q_shape = q_shape
         # Sqrt of the covariance of the posterior
-        if self.q_diag:
-            self.q_sqrt = Param(np.ones((self.num_data, self.num_latent)),
+        # diagonal
+        if self.q_shape == 'diagonal':
+            self._q_sqrt = Param(np.ones((self.num_data, self.num_latent)),
                                 transforms.positive)
-        else:
+        # fullrank
+        elif self.q_shape == 'fullrank':
             q_sqrt = np.array([np.eye(self.num_data)
                                 for _ in range(self.num_latent)]).swapaxes(0, 2)
-            self.q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform                              transforms.positive)
+            self._q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform                              transforms.positive)
+        # multi-diagonal-case
+        elif isinstance(self.q_shape, int):
+            # make sure q_shape is within 1 < num_data
+            assert(self.q_shape > 1 and self.q_shape < self.num_data)
+            q_sqrt = np.zeros((self.num_data, self.q_shape, self.num_latent),
+                                np_float_type)
+            # fill one in diagonal value
+            q_sqrt[:,0,:] = np.ones((self.num_data, self.num_latent),np_float_type)
+            self._q_sqrt = Param(q_sqrt)
         self.KL_analytic = KL_analytic
 
     def _compile(self, optimizer=None, **kw):
@@ -82,6 +93,8 @@ class StVGP(GPModel):
         shape of the data.
         """
         if not self.num_data == self.X.shape[0]:
+            raise NotImplementedError
+            '''
             self.num_data = self.X.shape[0]
             self.q_mu = Param(np.zeros((self.num_data, self.num_latent)))
             if self.q_diag:
@@ -91,6 +104,7 @@ class StVGP(GPModel):
                 q_sqrt = np.array([np.eye(self.num_data)
                                     for _ in range(self.num_latent)]).swapaxes(0, 2)
                 self.q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform                              transforms.positive)
+            '''
         return super(StVGP, self)._compile(optimizer=optimizer, **kw)
 
     def build_likelihood(self):
@@ -141,6 +155,33 @@ class StVGP(GPModel):
         f_samples = self._sample(n_sample[0])
         return self.likelihood.sample_Y(f_samples)
 
+    @property
+    def q_sqrt(self):
+        """
+        Reshape self._q_sqrt param to [R,n,n]
+        """
+        # Match dimension of the posterior variance to the data.
+        # diagonal case
+        if self.q_shape == 'diagonal':
+            return tf.transpose(
+                    tf.batch_matrix_diag(tf.transpose(self._q_sqrt)), [1,2,0])
+        else:
+            if self.q_shape == 'fullrank':
+                sqrt = self._q_sqrt
+            # multi-diagonal-case
+            else:
+                n,R,q = self.num_data, self.num_latent, self.q_shape
+                # shape [R, n, q]
+                paddings = [[0,0],[0, n-q+1],[0,0]]
+                # shape [R, n, n+1]
+                sqrt = tf.transpose(tf.reshape(tf.slice(tf.reshape(
+                                tf.pad(self._q_sqrt, paddings),  # [n,n+1,R]
+                                [n*(n+1),R]), [0,0], [n*n,R]), [n,n,R]),[1,0,2])
+                             # [n*(n+1),R] -> [n*n,R] -> [n,n,R]
+            # return with [n,n,R]
+            return tf.transpose(tf.batch_matrix_band_part(
+                                tf.transpose(sqrt,[2,0,1]), -1, 0), [1,2,0])
+
     def _sample(self, N):
         """
         :param integer N: number of samples
@@ -150,12 +191,7 @@ class StVGP(GPModel):
         """
         n = self.num_data
         R = self.num_latent
-        # Match dimension of the posterior variance to the data.
-        if self.q_diag:
-            sqrt = tf.batch_matrix_diag(tf.transpose(self.q_sqrt)) # [R,n,n]
-        else:
-            sqrt = tf.batch_matrix_band_part(
-                            tf.transpose(self.q_sqrt,[2,0,1]), -1, 0) # [R,n,n]
+        sqrt = tf.transpose(self.q_sqrt, [2,0,1])
         # Log determinant of matrix S = q_sqrt * q_sqrt^T
         logdet_S = tf.cast(N, float_type)*tf.reduce_sum(
                 tf.log(tf.square(tf.batch_matrix_diag_part(sqrt))))
@@ -188,8 +224,8 @@ class StVGP(GPModel):
         """
         Analytically evaluate KL
         """
-        if self.q_diag:
-            KL = kullback_leiblers.gauss_kl_white_diag(self.q_mu, self.q_sqrt)
+        if self.q_shape == 'diagonal':
+            KL = kullback_leiblers.gauss_kl_white_diag(self.q_mu, self._q_sqrt)
         else:
             KL = kullback_leiblers.gauss_kl_white(self.q_mu, self.q_sqrt)
         return KL

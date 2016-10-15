@@ -4,7 +4,7 @@ import tensorflow as tf
 import GPflow
 import GPinv
 
-class test_vgp(unittest.TestCase):
+class test_stvgp(unittest.TestCase):
     def setUp(self):
         rng = np.random.RandomState(0)
         self.X = np.linspace(0.,1.,20)
@@ -15,6 +15,37 @@ class test_vgp(unittest.TestCase):
                     GPinv.kernels.RBF(1,output_dim=1),
                     GPinv.likelihoods.Gaussian())
         m._compile()
+
+    def test_q_shape_diag(self):
+        m = GPinv.stvgp.StVGP(self.X.reshape(-1,1), self.Y.reshape(-1,1),
+                    kern = GPinv.kernels.RBF(1,output_dim=1),
+                    likelihood=GPinv.likelihoods.Gaussian(),
+                    q_shape='diagonal')
+        m._compile()
+        with m.tf_mode():
+            sqrt = m._session.run(m.q_sqrt)
+        self.assertTrue(np.allclose(
+                        sqrt, np.diag(np.ones(20)).reshape(20,20,1)))
+
+    def test_q_shape_multidiag(self):
+        X = np.ones((5,1))
+        Y = np.ones((5,1))
+        m = GPinv.stvgp.StVGP(X.reshape(-1,1), Y.reshape(-1,1),
+                    kern = GPinv.kernels.RBF(1,output_dim=1),
+                    likelihood=GPinv.likelihoods.Gaussian(),
+                    q_shape=3)
+        m._q_sqrt = np.hstack(
+                        [np.ones((5,1)),np.ones((5,1))*2.0, np.ones((5,1))*3.0]
+                        ).reshape(5,3,1)
+        sqrt_ref = np.eye(5)
+        for i in range(5-1):
+            sqrt_ref[i+1,i] = 2.0
+        for i in range(5-2):
+            sqrt_ref[i+2,i] = 3.0
+        m._compile()
+        with m.tf_mode():
+            sqrt = m._session.run(m.q_sqrt)
+        self.assertTrue(np.allclose(sqrt[:,:,0], sqrt_ref))
 
     def test_optimize(self):
         # reference GPR
@@ -56,6 +87,7 @@ class test_vgp(unittest.TestCase):
         self.assertTrue(np.allclose(mu, mu_ref, atol=0.03))
         self.assertTrue(np.allclose(var, var_ref, atol=0.003))
 
+
     def test_samples(self):
         # tested StVGP
         tf.set_random_seed(1)
@@ -88,7 +120,7 @@ class test_vgp(unittest.TestCase):
         m = GPinv.stvgp.StVGP(self.X.reshape(-1,1), self.Y.reshape(-1,1),
                     GPinv.kernels.RBF(1,output_dim=1),
                     GPinv.likelihoods.Gaussian(),
-                    q_diag = True)
+                    q_shape = 'diagonal')
         trainer = tf.train.AdamOptimizer(learning_rate=0.002)
         # Stochastic optimization by tf.train
         rslt = m.optimize(trainer, maxiter=3000)

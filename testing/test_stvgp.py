@@ -81,6 +81,18 @@ class test_vgp(unittest.TestCase):
         # Stochastic optimization by tf.train
         rslt = m.optimize(trainer, maxiter=3000)
 
+    def test_qdiag(self):
+        """
+        Test option for stvgp.KL_analytic
+        """
+        m = GPinv.stvgp.StVGP(self.X.reshape(-1,1), self.Y.reshape(-1,1),
+                    GPinv.kernels.RBF(1,output_dim=1),
+                    GPinv.likelihoods.Gaussian(),
+                    q_diag = True)
+        trainer = tf.train.AdamOptimizer(learning_rate=0.002)
+        # Stochastic optimization by tf.train
+        rslt = m.optimize(trainer, maxiter=3000)
+
 
 if __name__ == '__main__':
     unittest.main()

@@ -31,7 +31,7 @@ class MeanFunction(mean_functions.MeanFunction):
 class Zero(MeanFunction):
     """ Zero mean """
     def __call__(self, X):
-        return tf.zeros([tf.shape(X)[0],self.output_dim], float_type)
+        return tf.zeros([self.output_dim, tf.shape(X)[0]], float_type)
 
 class Constant(MeanFunction):
     """ Constant mean """
@@ -42,7 +42,7 @@ class Constant(MeanFunction):
         self.c = Param(c)
 
     def __call__(self, X):
-        return tf.tile(tf.expand_dims(self.c,0), [tf.shape(X)[0],1])
+        return tf.tile(tf.expand_dims(self.c,-1), [1,tf.shape(X)[0]])
 
 class Stack(MeanFunction):
     """
@@ -69,4 +69,4 @@ class Stack(MeanFunction):
         Return a concatenated tensor of the multiple mean functions.
         The size of the return is n x (sum_i m_i.output_dim).
         """
-        return tf.concat(1, [l(X) for l in self.mean_list])
+        return tf.concat(0, [l(X) for l in self.mean_list])

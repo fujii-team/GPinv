@@ -19,6 +19,8 @@
 from __future__ import absolute_import
 import tensorflow as tf
 import numpy as np
+from types import MethodType
+import warnings
 from GPflow.densities import gaussian
 from GPflow.model import GPModel
 from GPflow import transforms,kullback_leiblers
@@ -135,25 +137,36 @@ class StVGP(GPModel):
                                            q_sqrt=self.q_sqrt, full_cov=full_cov, whiten=True)
         return mu + self.mean_function(Xnew), var
 
-    @AutoFlow((tf.int32, []))
-    def sample_F(self, n_sample):
-        """
-        Get samples of the latent function values at the observation points.
-        :param integer n_sample: number of samples.
-        :return tf.tensor: Samples sized [N,n,R]
-        """
-        f_samples = self._sample(n_sample[0])
-        return self.likelihood.sample_F(f_samples)
 
     @AutoFlow((tf.int32, []))
-    def sample_Y(self, n_sample):
+    def sample_from_GP(self, n_sample):
         """
-        Get samples of the latent function values at the observation points.
-        :param integer n_sample: number of samples.
-        :return tf.tensor: Samples sized [N,n,R]
+        Get samples from the posterior distribution.
         """
-        f_samples = self._sample(n_sample[0])
-        return self.likelihood.sample_Y(f_samples)
+        return self._sample(n_sample[0])
+
+    def sample_from_(self, func_name, n_sample):
+        """
+        Sample from likelihood function.
+        - n_samples integer: number of samples.
+        - func_name string:  function name in likelihood.
+        """
+        method_name = '_sample_from_'+func_name
+        # If this method does not have this method, we define and append it.
+        if not hasattr(self, method_name):
+            # A AutoFlowed method.
+            @AutoFlow((tf.int32, []))
+            def _build_sample_from_(self, n_sample):
+                # generate samples from GP
+                f_samples = self._sample(n_sample[0])
+                # pass these samples to the likelihood method
+                func = getattr(self.likelihood, func_name)
+                return func(f_samples)
+            # Append this method to self.
+            setattr(self, method_name, MethodType(_build_sample_from_, self))
+        # Then, call this method.
+        func = getattr(self, method_name)
+        return func(n_sample)
 
     @property
     def q_sqrt(self):
@@ -227,3 +240,13 @@ class StVGP(GPModel):
         else:
             KL = kullback_leiblers.gauss_kl_white(self.q_mu, self.q_sqrt)
         return KL
+
+    def sample_F(self, n_sample):
+        warnings.warn('sample_F is deprecated: use sample_from(...) instead',
+                  DeprecationWarning)
+        return self.sample_from_('sample_F', n_sample)
+
+    def sample_Y(self, n_sample):
+        warnings.warn('sample_Y is deprecated: use sample_from(...) instead',
+                  DeprecationWarning)
+        return self.sample_from_('sample_Y', n_sample)

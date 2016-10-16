@@ -87,6 +87,18 @@ class test_stvgp(unittest.TestCase):
         self.assertTrue(np.allclose(mu, mu_ref, atol=0.03))
         self.assertTrue(np.allclose(var, var_ref, atol=0.003))
 
+    def test_sample_from(self):
+        # tested StVGP
+        tf.set_random_seed(1)
+        m = GPinv.stvgp.StVGP(self.X.reshape(-1,1), self.Y.reshape(-1,1),
+                    kern = GPinv.kernels.RBF(1,output_dim=1),
+                    likelihood=GPinv.likelihoods.Gaussian())
+        # get samples
+        n_sample = 10
+        f_samples = m.sample_from_('sample_F', n_sample)
+        self.assertTrue(np.allclose(f_samples.shape, [n_sample,self.X.shape[0], 1]))
+
+
 
     def test_samples(self):
         # tested StVGP

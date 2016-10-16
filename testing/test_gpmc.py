@@ -35,8 +35,8 @@ class test_gpmc(unittest.TestCase):
         Xnew = np.linspace(0.,1.,22)
         mu, var = m.predict_f(Xnew.reshape(-1,1))
         # Just call sample_F and sample_Y
-        f_sample = m.sample_F(1)
-        y_sample = m.sample_Y(1)
+        f_sample = m.sample_from('F',1)
+        y_sample = m.sample_from('Y',1)
 
 if __name__ == '__main__':
     unittest.main()

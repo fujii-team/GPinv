@@ -19,21 +19,19 @@
 from __future__ import absolute_import
 import tensorflow as tf
 import numpy as np
-from types import MethodType
-import warnings
 from GPflow.densities import gaussian
-from GPflow.model import GPModel
 from GPflow import transforms,kullback_leiblers
 from GPflow.param import AutoFlow
 from GPflow.tf_wraps import eye
 from GPflow._settings import settings
+from .model import StVmodel
 from .mean_functions import Zero
 from .param import Param, DataHolder
 from . import conditionals
 float_type = settings.dtypes.float_type
 np_float_type = np.float32 if float_type is tf.float32 else np.float64
 
-class StVGP(GPModel):
+class StVGP(StVmodel):
     """
     Stochastic approximation of the Variational Gaussian process
     """
@@ -57,9 +55,9 @@ class StVGP(GPModel):
             mean_function = Zero(self.num_latent)
         # if minibatch_size is not None, Y is stored as MinibatchData.
         # Note that X is treated as DataHolder.
-        Y = DataHolder(Y, on_shape_change='recompile')
-        X = DataHolder(X, on_shape_change='recompile')
-        GPModel.__init__(self, X, Y, kern, likelihood, mean_function)
+        self.Y = DataHolder(Y, on_shape_change='recompile')
+        self.X = DataHolder(X, on_shape_change='recompile')
+        StVmodel.__init__(self, kern, likelihood, mean_function)
         # variational parameter.
         # Mean of the posterior
         self.q_mu = Param(np.zeros((self.num_data, self.num_latent)))
@@ -138,36 +136,6 @@ class StVGP(GPModel):
         return mu + self.mean_function(Xnew), var
 
 
-    @AutoFlow((tf.int32, []))
-    def sample_from_GP(self, n_sample):
-        """
-        Get samples from the posterior distribution.
-        """
-        return self._sample(n_sample[0])
-
-    def sample_from_(self, func_name, n_sample):
-        """
-        Sample from likelihood function.
-        - n_samples integer: number of samples.
-        - func_name string:  function name in likelihood.
-        """
-        method_name = '_sample_from_'+func_name
-        # If this method does not have this method, we define and append it.
-        if not hasattr(self, method_name):
-            # A AutoFlowed method.
-            @AutoFlow((tf.int32, []))
-            def _build_sample_from_(self, n_sample):
-                # generate samples from GP
-                f_samples = self._sample(n_sample[0])
-                # pass these samples to the likelihood method
-                func = getattr(self.likelihood, func_name)
-                return func(f_samples)
-            # Append this method to self.
-            setattr(self, method_name, MethodType(_build_sample_from_, self))
-        # Then, call this method.
-        func = getattr(self, method_name)
-        return func(n_sample)
-
     @property
     def q_sqrt(self):
         """
@@ -240,13 +208,3 @@ class StVGP(GPModel):
         else:
             KL = kullback_leiblers.gauss_kl_white(self.q_mu, self.q_sqrt)
         return KL
-
-    def sample_F(self, n_sample):
-        warnings.warn('sample_F is deprecated: use sample_from(...) instead',
-                  DeprecationWarning)
-        return self.sample_from_('sample_F', n_sample)
-
-    def sample_Y(self, n_sample):
-        warnings.warn('sample_Y is deprecated: use sample_from(...) instead',
-                  DeprecationWarning)
-        return self.sample_from_('sample_Y', n_sample)

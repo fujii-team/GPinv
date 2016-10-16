@@ -95,7 +95,7 @@ class test_stvgp(unittest.TestCase):
                     likelihood=GPinv.likelihoods.Gaussian())
         # get samples
         n_sample = 10
-        f_samples = m.sample_from_('sample_F', n_sample)
+        f_samples = m.sample_from('F', n_sample)
         self.assertTrue(np.allclose(f_samples.shape, [n_sample,self.X.shape[0], 1]))
 
 
@@ -108,9 +108,9 @@ class test_stvgp(unittest.TestCase):
                     likelihood=GPinv.likelihoods.Gaussian())
         # get samples
         num_samples = 10
-        f_samples = m.sample_F(num_samples)
+        f_samples = m.sample_from('F',num_samples)
         self.assertTrue(np.allclose(f_samples.shape, [num_samples,self.X.shape[0], 1]))
-        y_samples = m.sample_Y(num_samples)
+        y_samples = m.sample_from('Y',num_samples)
         self.assertTrue(np.allclose(y_samples.shape, [num_samples,self.X.shape[0], 1]))
 
     def test_KL_analytic(self):

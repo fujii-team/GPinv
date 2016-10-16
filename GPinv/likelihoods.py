@@ -13,6 +13,8 @@ np_float_type = np.float32 if float_type is tf.float32 else np.float64
 class Likelihood(Parameterized):
     """
     We newly implemented very simple likelihood, which requires only logp method.
+    Additional method can be used for sampling.
+    See sample_from method in StVmodel.
     """
     def __init__(self):
         Parameterized.__init__(self)
@@ -31,37 +33,6 @@ class Likelihood(Parameterized):
         raise NotImplementedError("implement the logp function\
                                   for this likelihood")
 
-    def sample_F(self, F):
-        """
-        :param tf.tensor F: sized [N,n,R]
-        :return tf.tensor : sized [k,m]
-        where N is number of samples to approximate integration.
-              n is number of evaluation point for one latent function,
-              R is number of latent functions,
-              k, m., Dimension of the data
-
-        Return function samples at the observation points.
-        This method is used to predict the function values at the data point.
-        """
-        raise NotImplementedError("implement the sample_F function\
-                                  for this likelihood")
-
-    def sample_Y(self, F):
-        """
-        :param tf.tensor F: sized [N,n,R]
-        :return tf.tensor : sized [k,m]
-        where N is number of samples to approximate integration.
-              n is number of evaluation point for one latent function,
-              R is number of latent functions,
-              k, m., Dimension of the data
-
-        Return samples from the predictive distribution of the data.
-        This method is used to predict the function values at the data point.
-        """
-        raise NotImplementedError("implement the sample_Y function\
-                                  for this likelihood")
-
-
 class Gaussian(Likelihood):
     def __init__(self):
         Likelihood.__init__(self)
@@ -75,8 +46,8 @@ class Gaussian(Likelihood):
         Y = tf.tile(tf.expand_dims(Y, 0), [tf.shape(F)[0],1,1])
         return densities.gaussian(F, Y, self.variance)
 
-    def sample_F(self, F):
+    def F(self, F):
         return F
 
-    def sample_Y(self, F):
+    def Y(self, F):
         return F + tf.sqrt(self.variance)*tf.random_normal(tf.shape(F), dtype=float_type)

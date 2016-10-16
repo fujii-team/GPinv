@@ -2,10 +2,74 @@ import tensorflow as tf
 import numpy as np
 from scipy.optimize import minimize, OptimizeResult
 import sys
+from types import MethodType
 from GPflow.model import Model, ObjectiveWrapper
 from GPflow._settings import settings
+from GPflow.param import AutoFlow
 from .param import Param, ParamList, DataHolder, HierarchicParameterized, set_local_methods
 float_type = settings.dtypes.float_type
+
+class StVmodel(Model):
+    """
+    Base model for Stochastic Variational inference.
+    """
+    def __init__(self, kern, likelihood, mean_function, name='mode'):
+        Model.__init__(self, name)
+        self.kern = kern
+        self.likelihood = likelihood
+        self.mean_function = mean_function
+
+    def build_predict(self):
+        raise NotImplementedError
+
+    def _sample(self, n_sample):
+        """
+        :param integer N: number of samples
+        :Returns
+         samples picked from the variational posterior.
+         The Kulback_leibler divergence is stored as self._KL
+        """
+        raise NotImplementedError
+
+    @AutoFlow((float_type, [None, None]))
+    def predict_f(self, Xnew):
+        """
+        Compute the mean and variance of the latent function(s) at the points
+        Xnew.
+        """
+        return self.build_predict(Xnew)
+
+    @AutoFlow((tf.int32, []))
+    def sample_from_GP(self, n_sample):
+        """
+        Get samples from the posterior distribution.
+        """
+        return self._sample(n_sample[0])
+
+    def sample_from(self, func_name, n_sample):
+        """
+        Sample from likelihood function.
+        - n_samples integer: number of samples.
+        - func_name string:  function name in likelihood.
+        """
+        method_name = '_sample_from_'+func_name
+        # If this method does not have this method, we define and append it.
+        if not hasattr(self, method_name):
+            # A AutoFlowed method.
+            @AutoFlow((tf.int32, []))
+            def _build_sample_from_(self, n_sample):
+                # generate samples from GP
+                f_samples = self._sample(n_sample[0])
+                # pass these samples to the likelihood method
+                func = getattr(self.likelihood, func_name)
+                return func(f_samples)
+            # Append this method to self.
+            setattr(self, method_name, MethodType(_build_sample_from_, self))
+        # Then, call this method.
+        func = getattr(self, method_name)
+        return func(n_sample)
+
+
 
 class HierarchicModel(Model):
     """

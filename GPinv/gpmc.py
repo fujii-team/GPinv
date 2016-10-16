@@ -17,26 +17,43 @@
 
 
 import tensorflow as tf
-from types import MethodType
-import warnings
-from GPflow import gpmc
-from GPflow.likelihoods import Likelihood
-from GPflow.tf_wraps import eye
-from GPflow.param import AutoFlow
+import numpy as np
+from GPflow.priors import Gaussian
+from .model import StVmodel
+from .param import Param, DataHolder
 from .mean_functions import Zero
 from . import conditionals
 
-class GPMC(gpmc.GPMC):
+class GPMC(StVmodel):
     """
     The same with GPflow.gpmc.GPMC, but can accept GPinv.kernels.Kern.
     """
     def __init__(self, X, Y, kern, likelihood,
                  mean_function=None, num_latent=None):
-
         num_latent = num_latent or Y.shape[1]
         if mean_function is None:
             mean_function = Zero(num_latent)
-        gpmc.GPMC.__init__(self, X, Y, kern, likelihood, mean_function, num_latent)
+
+        self.X = DataHolder(X, on_shape_change='recompile')
+        self.Y = DataHolder(Y, on_shape_change='recompile')
+        StVmodel.__init__(self, kern, likelihood, mean_function)
+        self.num_data = X.shape[0]
+        self.num_latent = num_latent or Y.shape[1]
+        self.V = Param(np.zeros((self.num_data, self.num_latent)))
+        self.V.prior = Gaussian(0., 1.)
+
+    def _compile(self):
+        """
+        Before calling the standard compile function, check to see if the size
+        of the data has changed and add parameters appropriately.
+        This is necessary because the shape of the parameters depends on the
+        shape of the data.
+        """
+        if not self.num_data == self.X.shape[0]:
+            self.num_data = self.X.shape[0]
+            self.V = Param(np.zeros((self.num_data, self.num_latent)))
+            self.V.prior = Gaussian(0., 1.)
+        super(GPMC, self)._compile()
 
     def build_likelihood(self):
         """
@@ -49,41 +66,8 @@ class GPMC(gpmc.GPMC):
 
     def build_predict(self, Xnew, full_cov=False):
         mu, var = conditionals.conditional(Xnew, self.X, self.kern, self.V,
-                                   q_sqrt=None, full_cov=full_cov, whiten=True)
+                                    q_sqrt=None, full_cov=full_cov, whiten=True)
         return mu + self.mean_function(Xnew), var
-
-    def sample_from_(self, func_name, n_sample):
-        """
-        Sample from likelihood function.
-        - n_samples integer: number of samples.
-        - func_name string:  function name in likelihood.
-        """
-        method_name = '_sample_from_'+func_name
-        # If this method does not have this method, we define and append it.
-        if not hasattr(self, method_name):
-            # A AutoFlowed method.
-            @AutoFlow((tf.int32, []))
-            def _build_sample_from_(self, n_sample):
-                # generate samples from GP
-                f_samples = self._sample(n_sample[0])
-                # pass these samples to the likelihood method
-                func = getattr(self.likelihood, func_name)
-                return func(f_samples)
-            # Append this method to self.
-            setattr(self, method_name, MethodType(_build_sample_from_, self))
-        # Then, call this method.
-        func = getattr(self, method_name)
-        return func(n_sample)
-
-    def sample_F(self, n_sample):
-        warnings.warn('sample_F is deprecated: use sample_from(...) instead',
-                  DeprecationWarning)
-        return self.sample_from_('sample_F', n_sample)
-
-    def sample_Y(self, n_sample):
-        warnings.warn('sample_Y is deprecated: use sample_from(...) instead',
-                  DeprecationWarning)
-        return self.sample_from_('sample_Y', n_sample)
 
     def _sample(self, n_sample):
         """

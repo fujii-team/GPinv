@@ -52,11 +52,10 @@ class StVmodel(Model):
         - n_samples integer: number of samples.
         - func_name string:  function name in likelihood.
         """
-        method_name = '_sample_from_'+func_name
+        method_name = 'sample_from_'+func_name
         # If this method does not have this method, we define and append it.
         if not hasattr(self, method_name):
             # A AutoFlowed method.
-            @AutoFlow((tf.int32, []))
             def _build_sample_from_(self, n_sample):
                 # generate samples from GP
                 f_samples = self._sample(n_sample[0])
@@ -64,13 +63,17 @@ class StVmodel(Model):
                 func = getattr(self.likelihood, func_name)
                 return func(f_samples)
             # Append this method to self.
-            setattr(self, method_name, MethodType(_build_sample_from_, self))
+            setattr(self, method_name, _build_sample_from_)
+            # Overwrite __name__ instance for method_name method
+            method = getattr(self, method_name)
+            method.__name__ = method_name            
         # Then, call this method.
-        func = getattr(self, method_name)
-        return func(n_sample)
+        autoflow = AutoFlow((tf.int32, []))
+        autoflow_runnable = autoflow(getattr(self, method_name))
+        return autoflow_runnable(self, n_sample)
 
 
-
+# TODO. Our model do not use np.optimize, providing much cleaner codes.
 class HierarchicModel(Model):
     """
     This class provides two optimizers, grobal and local optimizer.

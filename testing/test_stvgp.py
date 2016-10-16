@@ -97,7 +97,8 @@ class test_stvgp(unittest.TestCase):
         n_sample = 10
         f_samples = m.sample_from('F', n_sample)
         self.assertTrue(np.allclose(f_samples.shape, [n_sample,self.X.shape[0], 1]))
-
+        self.assertTrue(hasattr(m, '_sample_from_F_AF_storage'))
+        f_samples = m.sample_from('F', n_sample)
 
 
     def test_samples(self):

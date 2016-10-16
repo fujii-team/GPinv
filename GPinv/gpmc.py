@@ -17,6 +17,8 @@
 
 
 import tensorflow as tf
+from types import MethodType
+import warnings
 from GPflow import gpmc
 from GPflow.likelihoods import Likelihood
 from GPflow.tf_wraps import eye
@@ -42,7 +44,7 @@ class GPMC(gpmc.GPMC):
         model.
             \log p(Y, V | theta).
         """
-        f = self._get_f() # [1,n,R]
+        f = self._sample(1) # [1,n,R]
         return tf.reduce_sum(self.likelihood.logp(f, self.Y))
 
     def build_predict(self, Xnew, full_cov=False):
@@ -50,25 +52,40 @@ class GPMC(gpmc.GPMC):
                                    q_sqrt=None, full_cov=full_cov, whiten=True)
         return mu + self.mean_function(Xnew), var
 
-    @AutoFlow()
-    def sample_F(self):
+    def sample_from_(self, func_name, n_sample):
         """
-        Get samples of the latent function values at the observation points.
-        :param integer n_sample: number of samples.
-        :return tf.tensor: Samples sized [n,R]
+        Sample from likelihood function.
+        - n_samples integer: number of samples.
+        - func_name string:  function name in likelihood.
         """
-        return self.likelihood.sample_F(self._get_f())
+        method_name = '_sample_from_'+func_name
+        # If this method does not have this method, we define and append it.
+        if not hasattr(self, method_name):
+            # A AutoFlowed method.
+            @AutoFlow((tf.int32, []))
+            def _build_sample_from_(self, n_sample):
+                # generate samples from GP
+                f_samples = self._sample(n_sample[0])
+                # pass these samples to the likelihood method
+                func = getattr(self.likelihood, func_name)
+                return func(f_samples)
+            # Append this method to self.
+            setattr(self, method_name, MethodType(_build_sample_from_, self))
+        # Then, call this method.
+        func = getattr(self, method_name)
+        return func(n_sample)
 
-    @AutoFlow((tf.int32, []))
+    def sample_F(self, n_sample):
+        warnings.warn('sample_F is deprecated: use sample_from(...) instead',
+                  DeprecationWarning)
+        return self.sample_from_('sample_F', n_sample)
+
     def sample_Y(self, n_sample):
-        """
-        Get samples of the latent function values at the observation points.
-        :param integer n_sample: number of samples.
-        :return tf.tensor: Samples sized [N,n,R]
-        """
-        return self.likelihood.sample_Y(self._get_f())
+        warnings.warn('sample_Y is deprecated: use sample_from(...) instead',
+                  DeprecationWarning)
+        return self.sample_from_('sample_Y', n_sample)
 
-    def _get_f(self):
+    def _sample(self, n_sample):
         """
         Calculate GP function f from the current latent variables V and
         hyperparameters.
@@ -79,4 +96,4 @@ class GPMC(gpmc.GPMC):
                 tf.transpose(L,[2,0,1]), # [n,n,R] -> [R,n,n]
                 tf.expand_dims(tf.transpose(self.V), -1)),[-1]))\
                                     + self.mean_function(self.X)
-        return tf.expand_dims(F, 0) # size [1,n,R]
+        return tf.tile(tf.expand_dims(F, 0), [n_sample,1,1]) # size [N,n,R]

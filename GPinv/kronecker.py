@@ -60,5 +60,7 @@ class RBF2D(kernels.RBF):
         # core of the cholesky
         chol = kronecker_product(chol_dim1, chol_dim2)
         # expand and tile
-        var = tf.expand_dims(tf.expand_dims(self.variance, -1),-1)
-        return tf.sqrt(var) * tf.tile(tf.expand_dims(chol,0),[self.output_dim,1,1])
+        var = tf.tile(tf.expand_dims(tf.expand_dims(
+                            tf.sqrt(self.variance), 0),0),
+                    [tf.shape(chol)[0],tf.shape(chol)[1],1])
+        return var * tf.tile(tf.expand_dims(chol, -1),[1,1,tf.shape(var)[2]])

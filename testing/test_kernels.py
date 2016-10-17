@@ -28,16 +28,16 @@ class RefRBF(object):
                 x_dif = (X[i] - X2[j])/length
                 sq_dist = np.sum(x_dif*x_dif)
                 core[i, j] = np.exp(-0.5 * sq_dist)
-        K_mat = np.zeros((self.R, X.shape[0],X2.shape[0]))
+        K_mat = np.zeros((X.shape[0],X2.shape[0],self.R))
         for k in range(self.R):
-            K_mat[k,:,:] = core[:,:] * self.kern.variance.value[k]
+            K_mat[:,:,k] = core[:,:] * self.kern.variance.value[k]
         return K_mat
 
     def Kdiag(self, X):
-        K_diag = np.zeros((self.kern.variance.value.shape[0], X.shape[0]))
+        K_diag = np.zeros((X.shape[0], self.kern.variance.value.shape[0]))
         for i in range(X.shape[0]):
             var = self.kern.variance.value
-            K_diag[:,i] = var
+            K_diag[i,:] = var
         return K_diag
 
 class RefRBF_csym(RefRBF):
@@ -50,12 +50,12 @@ class RefRBF_csym(RefRBF):
 
     def Kdiag(self, X):
         X = np.abs(X)
-        K_diag = np.zeros((self.kern.variance.value.shape[0], X.shape[0]))
+        K_diag = np.zeros((X.shape[0], self.kern.variance.value.shape[0]))
         for i in range(X.shape[0]):
             var = self.kern.variance.value
             x_dif = 2*X[i]/self.kern.lengthscales.value
             sq_dist = np.sum(x_dif*x_dif)
-            K_diag[:,i] = var * (1.+np.exp(-0.5*sq_dist))
+            K_diag[i,:] = var * (1.+np.exp(-0.5*sq_dist))
         return K_diag
 
 
@@ -69,12 +69,12 @@ class RefRBF_casym(RefRBF):
 
     def Kdiag(self, X):
         X = np.abs(X)
-        K_diag = np.zeros((self.kern.variance.value.shape[0], X.shape[0]))
+        K_diag = np.zeros((X.shape[0], self.kern.variance.value.shape[0]))
         for i in range(X.shape[0]):
             var = self.kern.variance.value
             x_dif = 2*X[i]/self.kern.lengthscales.value
             sq_dist = np.sum(x_dif*x_dif)
-            K_diag[:,i] = var * (1.-np.exp(-0.5*sq_dist))
+            K_diag[i,:] = var * (1.-np.exp(-0.5*sq_dist))
         return K_diag
 
 
@@ -119,9 +119,9 @@ class test_rbf(unittest.TestCase):
         with self.m.tf_mode():
             K = self.sess.run(self.m.kern.K(self.X))
             chol = self.sess.run(self.m.kern.Cholesky(self.X))
-        for i in range(chol.shape[0]):
-            self.assertTrue(np.allclose(K[i,:,:],
-                        np.dot(chol[i,:,:], np.transpose(chol[i,:,:]))))
+        for i in range(chol.shape[2]):
+            self.assertTrue(np.allclose(K[:,:,i],
+                        np.dot(chol[:,:,i], np.transpose(chol[:,:,i]))))
     # ------ test for RBF_csym -----
     def test_Kxx_csym(self):
         with self.m.tf_mode():
@@ -148,9 +148,9 @@ class test_rbf(unittest.TestCase):
         with self.m.tf_mode():
             K = self.sess.run(self.m.kern_csym.K(self.X))
             chol = self.sess.run(self.m.kern_csym.Cholesky(self.X))
-        for i in range(chol.shape[0]):
-            self.assertTrue(np.allclose(K[i,:,:],
-                        np.dot(chol[i,:,:], np.transpose(chol[i,:,:]))))
+        for i in range(chol.shape[2]):
+            self.assertTrue(np.allclose(K[:,:,i],
+                        np.dot(chol[:,:,i], np.transpose(chol[:,:,i]))))
     # ------ test for RBF_casym -----
     def test_Kxx_casym(self):
         with self.m.tf_mode():
@@ -177,9 +177,9 @@ class test_rbf(unittest.TestCase):
         with self.m.tf_mode():
             K = self.sess.run(self.m.kern_casym.K(self.X))
             chol = self.sess.run(self.m.kern_casym.Cholesky(self.X))
-        for i in range(chol.shape[0]):
-            self.assertTrue(np.allclose(K[i,:,:],
-                        np.dot(chol[i,:,:], np.transpose(chol[i,:,:])),
+        for i in range(chol.shape[2]):
+            self.assertTrue(np.allclose(K[:,:,i],
+                        np.dot(chol[:,:,i], np.transpose(chol[:,:,i])),
                         atol=1.0e-4))
 
 class test_stack(unittest.TestCase):
@@ -205,9 +205,9 @@ class test_stack(unittest.TestCase):
         ref1 = RefRBF(self.kern1)
         ref2 = RefRBF(self.kern2)
         ref3 = RefRBF_csym(self.kern3)
-        self.assertTrue(np.allclose(Kxx[0:3,:,:], ref1.K(self.X)))
-        self.assertTrue(np.allclose(Kxx[3:6,:,:], ref2.K(self.X)))
-        self.assertTrue(np.allclose(Kxx[6:9,:,:], ref3.K(self.X)))
+        self.assertTrue(np.allclose(Kxx[:,:,0:3], ref1.K(self.X)))
+        self.assertTrue(np.allclose(Kxx[:,:,3:6], ref2.K(self.X)))
+        self.assertTrue(np.allclose(Kxx[:,:,6:9], ref3.K(self.X)))
 
     def test_Kxx2(self):
         with self.m.tf_mode():
@@ -215,9 +215,9 @@ class test_stack(unittest.TestCase):
         ref1 = RefRBF(self.kern1)
         ref2 = RefRBF(self.kern2)
         ref3 = RefRBF_csym(self.kern3)
-        self.assertTrue(np.allclose(Kxx2[0:3,:,:], ref1.K(self.X, self.X2)))
-        self.assertTrue(np.allclose(Kxx2[3:6,:,:], ref2.K(self.X, self.X2)))
-        self.assertTrue(np.allclose(Kxx2[6:9,:,:], ref3.K(self.X, self.X2)))
+        self.assertTrue(np.allclose(Kxx2[:,:,0:3], ref1.K(self.X, self.X2)))
+        self.assertTrue(np.allclose(Kxx2[:,:,3:6], ref2.K(self.X, self.X2)))
+        self.assertTrue(np.allclose(Kxx2[:,:,6:9], ref3.K(self.X, self.X2)))
 
     def test_Kdiag(self):
         with self.m.tf_mode():
@@ -225,17 +225,18 @@ class test_stack(unittest.TestCase):
         ref1 = RefRBF(self.kern1)
         ref2 = RefRBF(self.kern2)
         ref3 = RefRBF_csym(self.kern3)
-        self.assertTrue(np.allclose(Kdiag[0:3,:], ref1.Kdiag(self.X)))
-        self.assertTrue(np.allclose(Kdiag[3:6,:], ref2.Kdiag(self.X)))
-        self.assertTrue(np.allclose(Kdiag[6:9,:], ref3.Kdiag(self.X)))
+        self.assertTrue(np.allclose(Kdiag[:,0:3], ref1.Kdiag(self.X)))
+        self.assertTrue(np.allclose(Kdiag[:,3:6], ref2.Kdiag(self.X)))
+        self.assertTrue(np.allclose(Kdiag[:,6:9], ref3.Kdiag(self.X)))
 
     def test_Cholesky(self):
         with self.m.tf_mode():
             Kxx  = self.sess.run(self.m.kern.K(self.X))
             chol = self.sess.run(self.m.kern.Cholesky(self.X))
-        for i in range(chol.shape[0]):
-            self.assertTrue(np.allclose(Kxx[i,:,:],
-                        np.dot(chol[i,:,:], np.transpose(chol[i,:,:]))))
+        for i in range(chol.shape[2]):
+            self.assertTrue(np.allclose(Kxx[:,:,i],
+                        np.dot(chol[:,:,i], np.transpose(chol[:,:,i]))))
+
 
 
 if __name__ == '__main__':

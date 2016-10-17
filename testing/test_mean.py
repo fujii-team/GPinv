@@ -24,14 +24,14 @@ class test_mean(unittest.TestCase):
     def test_zero(self):
         with self.m.tf_mode():
             mean  = self.sess.run(self.m.mean1(self.X))
-        self.assertTrue(np.allclose(mean, np.zeros((3,10))))
+        self.assertTrue(np.allclose(mean, np.zeros((10,3))))
 
     def test_const(self):
         with self.m.tf_mode():
             mean2 = self.sess.run(self.m.mean2(self.X))
             mean3 = self.sess.run(self.m.mean3(self.X))
-        self.assertTrue(np.allclose(mean2, np.ones((3,10))))
-        self.assertTrue(np.allclose(mean3, np.ones((3,10))*0.1))
+        self.assertTrue(np.allclose(mean2, np.ones((10,3))))
+        self.assertTrue(np.allclose(mean3, np.ones((10,3))*0.1))
 
 class test_stack(unittest.TestCase):
     def setUp(self):
@@ -52,9 +52,9 @@ class test_stack(unittest.TestCase):
     def test(self):
         with self.m.tf_mode():
             mean = self.sess.run(self.m.mean(self.X))
-        self.assertTrue(np.allclose(mean[0:3,:], np.zeros((3,10))))
-        self.assertTrue(np.allclose(mean[3:6,:], np.ones((3,10))))
-        self.assertTrue(np.allclose(mean[6:9,:], np.ones((3,10))*0.1))
+        self.assertTrue(np.allclose(mean[:,0:3], np.zeros((10,3))))
+        self.assertTrue(np.allclose(mean[:,3:6], np.ones((10,3))))
+        self.assertTrue(np.allclose(mean[:,6:9], np.ones((10,3))*0.1))
 
 
 if __name__ == '__main__':

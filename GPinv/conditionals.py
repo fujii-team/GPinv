@@ -37,26 +37,26 @@ def conditional(Xnew, X, kern, f, full_cov=False, q_sqrt=None, whiten=False):
     """
     # compute kernel stuff
     num_data = tf.shape(X)[0]
-    Kmn = kern.K(X, Xnew) # [R,n,n2]
-    Lm  = kern.Cholesky(X) # [R,n,n]
+    Kmn = tf.transpose(kern.K(X, Xnew), [2,0,1]) # [R,n,n2]
+    Lm  = tf.transpose(kern.Cholesky(X),[2,0,1]) # [R,n,n]
 
     # Compute the projection matrix A
     A = tf.batch_matrix_triangular_solve(Lm, Kmn, lower=True)
 
     # compute the covariance due to the conditioning
     if full_cov: # shape [R,n,n]
-        fvar = kern.K(Xnew) - tf.matmul(A, A, transpose_a=True)
+        fvar = tf.transpose(kern.K(Xnew),[2,0,1]) - tf.matmul(A, A, transpose_a=True)
     else:        # shape [R,n]
-        fvar = kern.Kdiag(Xnew) - tf.reduce_sum(tf.square(A), 1)
+        fvar = tf.transpose(kern.Kdiag(Xnew)) - tf.reduce_sum(tf.square(A), 1)
 
     # another backsubstitution in the unwhitened case
     if not whiten:
-        A = tf.batch_matrix_triangular_solve(Lm, A, lower=False)
+        A = tf.batch_matrix_triangular_solve(tf.transpose(Lm,[0,2,1]), A, lower=False)
 
     # change shape of f [m,R] -> [R,m,1]
-    f = tf.expand_dims(f, -1)
+    f = tf.expand_dims(tf.transpose(f), -1)
     # construct the conditional mean, sized [m,R]
-    fmean = tf.transpose(tf.squeeze(tf.batch_matmul(A, f, adj_x=True), [-1]))
+    fmean = tf.transpose(tf.squeeze(tf.batch_matmul(tf.transpose(A,[0,2,1]), f), [-1]))
 
     if q_sqrt is not None:
         # diagonal case.
@@ -73,6 +73,6 @@ def conditional(Xnew, X, kern, f, full_cov=False, q_sqrt=None, whiten=False):
             fvar = fvar + tf.batch_matmul(LTA, LTA, adj_x=True)  # R x n x n
         else:
             fvar = fvar + tf.reduce_sum(tf.square(LTA), 1)  # R x n
-    #fvar = tf.transpose(fvar)  # n x R or n x n x R
+    fvar = tf.transpose(fvar)  # n x R or n x n x R
 
     return fmean, fvar

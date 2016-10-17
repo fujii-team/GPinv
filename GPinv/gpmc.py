@@ -39,7 +39,7 @@ class GPMC(StVmodel):
         StVmodel.__init__(self, kern, likelihood, mean_function)
         self.num_data = X.shape[0]
         self.num_latent = num_latent or Y.shape[1]
-        self.V = Param(np.zeros((self.num_latent,self.num_data)))
+        self.V = Param(np.zeros((self.num_data, self.num_latent)))
         self.V.prior = Gaussian(0., 1.)
 
     def _compile(self):
@@ -51,7 +51,7 @@ class GPMC(StVmodel):
         """
         if not self.num_data == self.X.shape[0]:
             self.num_data = self.X.shape[0]
-            self.V = Param(np.zeros((self.num_latent,self.num_data)))
+            self.V = Param(np.zeros((self.num_data, self.num_latent)))
             self.V.prior = Gaussian(0., 1.)
         super(GPMC, self)._compile()
 
@@ -76,6 +76,8 @@ class GPMC(StVmodel):
         """
         L = self.kern.Cholesky(self.X) # size [R,n,n]
         F = tf.transpose(tf.squeeze(   # size [n,R]
-            tf.batch_matmul(L,tf.expand_dims(self.V, -1)),[-1]))\
+            tf.batch_matmul(
+                tf.transpose(L,[2,0,1]), # [n,n,R] -> [R,n,n]
+                tf.expand_dims(tf.transpose(self.V), -1)),[-1]))\
                                     + self.mean_function(self.X)
         return tf.tile(tf.expand_dims(F, 0), [n_sample,1,1]) # size [N,n,R]

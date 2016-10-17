@@ -49,9 +49,9 @@ class test_RBF2D(unittest.TestCase):
             kern = tf.Session().run(m.rbf.K(X), m.get_feed_dict())
             chol = tf.Session().run(m.kronecker.Cholesky(X), m.get_feed_dict())
 
-        for i in range(chol.shape[0]):
-            kern_from_chol = np.dot(chol[i,:,:], np.transpose(chol[i,:,:]))
-            self.assertTrue(np.allclose(kern[i,:,:], kern_from_chol, atol=1.0e-4))
+        for i in range(chol.shape[2]):
+            kern_from_chol = np.dot(chol[:,:,i], np.transpose(chol[:,:,i]))
+            self.assertTrue(np.allclose(kern[:,:,i], kern_from_chol, atol=1.0e-4))
 
 if __name__ == '__main__':
     unittest.main()

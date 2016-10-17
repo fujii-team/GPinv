@@ -73,3 +73,7 @@ archive_notebooks
 
 # memo for codeship setting
 codeship_settings.txt
+
+# timeline-file added by test
+timeline.json
+.timeline.json

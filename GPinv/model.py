@@ -1,4 +1,5 @@
 import tensorflow as tf
+from tensorflow.python.client import timeline
 import numpy as np
 from scipy.optimize import minimize, OptimizeResult
 import sys
@@ -78,11 +79,30 @@ class StVmodel(Model):
         Optimize the model using a tensorflow optimizer. See self.optimize()
         """
         opt_step = self._compile(optimizer=method, **kw)
-        feed_dict = self.get_feed_dict()
+
+        if settings.profiling.dump_timeline:
+            run_options = tf.RunOptions(trace_level=tf.RunOptions.FULL_TRACE)
+            run_metadata = tf.RunMetadata()
+            dump_filename = 'timeline.json'
+            def dump():
+                # Create the Timeline object, and write it to a json
+                tl = timeline.Timeline(run_metadata.step_stats)
+                ctf = tl.generate_chrome_trace_format()
+                if hasattr(settings.profiling,'timeline_file'):
+                    filename = settings.profiling.timeline_file
+                else:
+                    filename = 'timeline.json'
+                with open(filename, 'w') as f:
+                    f.write(ctf)
+
+        else:
+            run_options, run_metadata = None, None
+
         try:
             iteration = 0
             while iteration < maxiter:
-                self._session.run(opt_step, feed_dict=feed_dict)
+                self._session.run(opt_step, feed_dict=self.get_feed_dict(),
+                        options=run_options, run_metadata=run_metadata)
                 if callback is not None:
                     callback(self._session.run(self._free_vars))
                 iteration += 1
@@ -90,6 +110,8 @@ class StVmodel(Model):
             print("Caught KeyboardInterrupt, setting model\
                   with most recent state.")
             self.set_state(self._session.run(self._free_vars))
+            if settings.profiling.dump_timeline:
+                dump()
             return None
 
         final_x = self._session.run(self._free_vars)
@@ -101,6 +123,8 @@ class StVmodel(Model):
                            fun=fun,
                            jac=jac,
                            status="Finished iterations.")
+        if settings.profiling.dump_timeline:
+            dump()
         return r
 
 # TODO. Our model do not use np.optimize, providing much cleaner codes.

@@ -152,7 +152,7 @@ class StVGP(StVmodel):
             return tf.batch_matrix_diag(self._q_sqrt)
         else:
             if self.q_shape == 'fullrank':
-                sqrt = self._q_sqrt
+                return tf.batch_matrix_band_part(self._q_sqrt, -1, 0)
             # multi-diagonal-case
             else:
                 n,R,q = self.num_data, self.num_latent, self.q_shape
@@ -164,7 +164,54 @@ class StVGP(StVmodel):
                                 [R, n*(n+1)]), [0,n], [R,n*n]), [R,n,n])
                              # [R,n*(n+1)] -> [R,n*n] -> [R,n,n]
             # return with [R,n,n]
-            return tf.batch_matrix_band_part(sqrt, -1, 0)
+                return tf.batch_matrix_band_part(sqrt, -1, 0)
+
+
+    def _transform_samples(self, v):
+        """
+        Transform random samples picked from normal distribution v, to that from
+        variational posterior u.
+
+        u = mu + sqrt*v
+
+        v,u: [R,n,N], mu: [R,n],
+        sqrt: [R,n] for diagonal, [R,n,1] for semi-diag, [R,n,n] for fullrank
+        """
+        if self.q_shape == 'diagonal': # self._q_sqrt [R,n]
+            return tf.expand_dims(self.q_mu, -1) + \
+                   tf.expand_dims(self._q_sqrt, -1) * v
+        else:
+            return tf.expand_dims(self.q_mu, -1) + \
+                   tf.batch_matmul(self.q_sqrt, v)
+        """elif self.q_shape == 'fullrank':
+            sqrt = tf.batch_matrix_band_part(self._q_sqrt, -1, 0) # [R,n,n]
+            return tf.expand_dims(self.q_mu, -1) + \
+                   tf.batch_matmul(sqrt, v)
+        else: # semi-diag case
+            n,R,q,N = self.num_data, self.num_latent, self.q_shape, self.num_samples
+            sqrt = tf.expand_dims(
+                    tf.batch_matrix_band_part(
+                    tf.reverse(self._q_sqrt, [False,False,True]), -1, 0),2) # [R,n,1,q]
+            v_pad = tf.pad(v, [[0,0],[0,1],[0,0]]) # [R,n+1,N]
+            v_tile = tf.reshape(tf.slice(tf.tile(v_pad, [1,q,1]), # [R,(n+1)q,N]
+                                            [0,0,0],[R,n*q,-1]),    # [R,nq, N]
+                                            [R,n,q,-1])
+            return tf.squeeze(tf.batch_matmul(sqrt, v_tile), [2])
+        """
+
+    def _logdet(self):
+        """
+        Evaluate determinant for q_sqrt
+        """
+        if self.q_shape == 'diagonal': # self._q_sqrt [R,n]
+            return 2.0*tf.reduce_sum(tf.log(self._q_sqrt))
+        elif self.q_shape == 'fullrank':
+            return tf.reduce_sum(
+                tf.log(tf.square(tf.batch_matrix_diag_part(self.q_sqrt))))
+        else: # semi-diag
+            return tf.reduce_sum(
+                tf.log(tf.square(
+                    tf.slice(self._q_sqrt, [0,0,self.q_shape-1], [-1,-1,-1]))))
 
     def _sample(self, N):
         """
@@ -176,22 +223,17 @@ class StVGP(StVmodel):
         n = self.num_data
         R = self.num_latent
         sqrt = self.q_sqrt # [R,n,n]
-        # Log determinant of matrix S = q_sqrt * q_sqrt^T
-        logdet_S = tf.cast(N, float_type)*tf.reduce_sum(
-                tf.log(tf.square(tf.batch_matrix_diag_part(sqrt))))
         # noraml random samples, [R,n,N]
         v_samples = tf.random_normal([R,n,N], dtype=float_type)
-        # Match dimension of the posterior mean, [R,n,N]
-        mu = tf.tile(tf.expand_dims(self.q_mu, -1), [1,1,N])
-        u_samples = mu + tf.batch_matmul(sqrt, v_samples)
+        u_samples = self._transform_samples(v_samples)
         # Stochastic approximation of the Kulback_leibler KL[q(f)||p(f)]
-        self._KL = - 0.5 * logdet_S\
-             - 0.5 * tf.reduce_sum(tf.square(v_samples)) \
-             + 0.5 * tf.reduce_sum(tf.square(u_samples))
+        self._KL = - 0.5 * self._logdet() * tf.cast(N, float_type)\
+                   - 0.5 * tf.reduce_sum(tf.square(v_samples)) \
+                   + 0.5 * tf.reduce_sum(tf.square(u_samples))
         # Cholesky factor of kernel [R,n,n]
         L = self.kern.Cholesky(self.X)
         # mean, sized [R,n,N]           [R,n]
-        mean = tf.tile(tf.expand_dims(self.mean_function(self.X),-1), [1,1,N])
+        mean = tf.expand_dims(self.mean_function(self.X),-1)
         # sample from posterior, [N,n,R]
         f_samples = tf.batch_matmul(L, u_samples) + mean
         # return as Dict to deal with

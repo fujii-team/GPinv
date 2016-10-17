@@ -39,29 +39,6 @@ class Kern(object):
         # variance should be 1d-np.array sized [output_dim]
         self.output_dim = output_dim
 
-    def K(self, X, X2=None):
-        core = tf.tile(tf.expand_dims(self._Kcore(X, X2),-1),
-                                [1,1,tf.shape(self.variance)[0]]) # [N,N,R]
-        var = tf.tile(
-                tf.expand_dims(tf.expand_dims(self.variance, 0),0), # [1,1,R]
-                    [tf.shape(core)[0],tf.shape(core)[1],1]) # [N,N,R]
-        return var * core
-
-    def Kdiag(self,X):
-        """
-        Return: tf.tensor sized [N,R]
-        """
-        return tf.tile(tf.expand_dims(self.variance,0), [tf.shape(X)[0],1])
-
-    def Cholesky(self, X):
-        core = self._Kcore(X, X2=None) + \
-                    eye(tf.shape(X)[0]) * settings.numerics.jitter_level
-        chol = tf.cholesky(core)
-        var = tf.tile(tf.expand_dims(tf.expand_dims(
-                            tf.sqrt(self.variance), 0),0),
-                    [tf.shape(core)[0],tf.shape(core)[1],1])
-        return var * tf.tile(tf.expand_dims(chol, -1),[1,1,tf.shape(var)[2]])
-
     def _Kcore(self, X, X2=None):
         """
         Returns the unit kernel which is common for all the output dimensions.
@@ -98,6 +75,25 @@ class Stationary(Kern, kernels.Stationary):
         kernels.Stationary.__init__(self, input_dim, variance, lengthscales,
                                     active_dims, ARD)
 
+    def K(self, X, X2=None):
+        core = tf.tile(tf.expand_dims(self._Kcore(X, X2),0),
+                                [self.output_dim,1,1]) # [R,n,n]
+        var = tf.expand_dims(tf.expand_dims(self.variance, -1),-1)
+        return var * core # [R,n,n]
+
+    def Kdiag(self,X):
+        """
+        Return: tf.tensor sized [N,R]
+        """
+        return tf.tile(tf.expand_dims(self.variance,-1), [1,tf.shape(X)[0]])
+
+    def Cholesky(self, X):
+        core = self._Kcore(X, X2=None) + \
+                    eye(tf.shape(X)[0]) * settings.numerics.jitter_level
+        chol = tf.cholesky(core)
+        var = tf.expand_dims(tf.expand_dims(self.variance, -1),-1)
+        return tf.sqrt(var) * tf.tile(tf.expand_dims(chol,0),[self.output_dim,1,1])
+
 class RBF(Stationary):
     """
     The radial basis function (RBF) or squared exponential kernel
@@ -124,11 +120,11 @@ class RBF_csym(RBF):
         X, _ = self._slice(X, None)
         X = tf.abs(X)
         square_dist = tf.reduce_sum(tf.square((X+X)/self.lengthscales), 1)
-        # shape [N,R]
-        var = tf.tile(tf.expand_dims(self.variance,0), [tf.shape(X)[0],1])
+        # shape [R,N]
         diag = tf.exp(-0.5*square_dist)
-        diag = tf.tile(tf.expand_dims(tf.ones_like(diag)+diag, -1),
-                                    [1,tf.shape(var)[1]])
+        diag = tf.tile(tf.expand_dims(tf.ones_like(diag)+diag, 0),
+                                                [self.output_dim, 1])
+        var = tf.expand_dims(self.variance, -1)
         return var * diag
 
 class RBF_casym(RBF):
@@ -150,10 +146,10 @@ class RBF_casym(RBF):
         X = tf.abs(X)
         square_dist = tf.reduce_sum(tf.square((X+X)/self.lengthscales), 1)
         # shape [N,R]
-        var = tf.tile(tf.expand_dims(self.variance,0), [tf.shape(X)[0],1])
         diag = tf.exp(-0.5*square_dist)
-        diag = tf.tile(tf.expand_dims(tf.ones_like(diag)-diag, -1),
-                                    [1,tf.shape(var)[1]])
+        diag = tf.tile(tf.expand_dims(tf.ones_like(diag)-diag, 0),
+                                                    [self.output_dim, 1])
+        var = tf.expand_dims(self.variance, -1)
         return var * diag
 
 class Stack(Kern, kernels.Kern):
@@ -180,10 +176,10 @@ class Stack(Kern, kernels.Kern):
         self.kern_list = ParamList(list_of_kerns)
 
     def K(self, X, X2=None):
-        return tf.concat(2, [k.K(X,X2) for k in self.kern_list])
+        return tf.concat(0, [k.K(X,X2) for k in self.kern_list])
 
     def Kdiag(self,X):
-        return tf.concat(1, [k.Kdiag(X) for k in self.kern_list])
+        return tf.concat(0, [k.Kdiag(X) for k in self.kern_list])
 
     def Cholesky(self, X):
-        return tf.concat(2, [k.Cholesky(X) for k in self.kern_list])
+        return tf.concat(0, [k.Cholesky(X) for k in self.kern_list])

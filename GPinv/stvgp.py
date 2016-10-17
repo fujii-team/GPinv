@@ -59,28 +59,29 @@ class StVGP(StVmodel):
         self.X = DataHolder(X, on_shape_change='recompile')
         StVmodel.__init__(self, kern, likelihood, mean_function)
         # variational parameter.
-        # Mean of the posterior
-        self.q_mu = Param(np.zeros((self.num_data, self.num_latent)))
+        # Mean of the posterior # shape [R,n]
+        self.q_mu = Param(np.zeros((self.num_latent, self.num_data)))
         # If true, mean-field approimation is made.
         self.q_shape = q_shape
         # Sqrt of the covariance of the posterior
         # diagonal
-        if self.q_shape == 'diagonal':
-            self._q_sqrt = Param(np.ones((self.num_data, self.num_latent)),
+        if self.q_shape == 'diagonal': # shape [R,n]
+            self._q_sqrt = Param(np.ones((self.num_latent, self.num_data)),
                                 transforms.positive)
         # fullrank
         elif self.q_shape == 'fullrank':
-            q_sqrt = np.array([np.eye(self.num_data)
-                                for _ in range(self.num_latent)]).swapaxes(0, 2)
-            self._q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform                              transforms.positive)
+            q_sqrt = np.array([np.eye(self.num_data) # shape [R,n,n]
+                                for _ in range(self.num_latent)])
+            self._q_sqrt = Param(q_sqrt)
+            # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform                              transforms.positive)
         # multi-diagonal-case
         elif isinstance(self.q_shape, int):
             # make sure q_shape is within 1 < num_data
             assert(self.q_shape > 1 and self.q_shape < self.num_data)
-            q_sqrt = np.zeros((self.num_data, self.q_shape, self.num_latent),
+            q_sqrt = np.zeros((self.num_latent, self.num_data, self.q_shape),
                                 np_float_type)
             # fill one in diagonal value
-            q_sqrt[:,0,:] = np.ones((self.num_data, self.num_latent),np_float_type)
+            q_sqrt[:,:,self.q_shape-1] = np.ones((self.num_latent, self.num_data),np_float_type)
             self._q_sqrt = Param(q_sqrt)
         self.KL_analytic = KL_analytic
 
@@ -131,8 +132,12 @@ class StVGP(StVmodel):
         :return tf.tensor var: The posterior mean sized [n,R] for full_cov=False
                                                       [n,n,R] for full_cov=True.
         """
-        mu, var = conditionals.conditional(Xnew, self.X, self.kern, self.q_mu,
-                                           q_sqrt=self.q_sqrt, full_cov=full_cov, whiten=True)
+        if self.q_shape == 'diagonal':
+            mu, var = conditionals.conditional(Xnew, self.X, self.kern, self.q_mu,
+                           q_sqrt=tf.transpose(self._q_sqrt), full_cov=full_cov, whiten=True)
+        else:
+            mu, var = conditionals.conditional(Xnew, self.X, self.kern, self.q_mu,
+                           q_sqrt=tf.transpose(self.q_sqrt,[1,2,0]), full_cov=full_cov, whiten=True)
         return mu + self.mean_function(Xnew), var
 
 
@@ -144,8 +149,7 @@ class StVGP(StVmodel):
         # Match dimension of the posterior variance to the data.
         # diagonal case
         if self.q_shape == 'diagonal':
-            return tf.transpose(
-                    tf.batch_matrix_diag(tf.transpose(self._q_sqrt)), [1,2,0])
+            return tf.batch_matrix_diag(self._q_sqrt)
         else:
             if self.q_shape == 'fullrank':
                 sqrt = self._q_sqrt
@@ -153,15 +157,14 @@ class StVGP(StVmodel):
             else:
                 n,R,q = self.num_data, self.num_latent, self.q_shape
                 # shape [R, n, q]
-                paddings = [[0,0],[0, n-q+1],[0,0]]
+                paddings = [[0,0],[0,0],[n-q+1,0]]
                 # shape [R, n, n+1]
-                sqrt = tf.transpose(tf.reshape(tf.slice(tf.reshape(
-                                tf.pad(self._q_sqrt, paddings),  # [n,n+1,R]
-                                [n*(n+1),R]), [0,0], [n*n,R]), [n,n,R]),[1,0,2])
-                             # [n*(n+1),R] -> [n*n,R] -> [n,n,R]
-            # return with [n,n,R]
-            return tf.transpose(tf.batch_matrix_band_part(
-                                tf.transpose(sqrt,[2,0,1]), -1, 0), [1,2,0])
+                sqrt = tf.reshape(tf.slice(tf.reshape(
+                                tf.pad(self._q_sqrt, paddings),  # [R,n,n+1]
+                                [R, n*(n+1)]), [0,n], [R,n*n]), [R,n,n])
+                             # [R,n*(n+1)] -> [R,n*n] -> [R,n,n]
+            # return with [R,n,n]
+            return tf.batch_matrix_band_part(sqrt, -1, 0)
 
     def _sample(self, N):
         """
@@ -172,30 +175,25 @@ class StVGP(StVmodel):
         """
         n = self.num_data
         R = self.num_latent
-        sqrt = tf.transpose(self.q_sqrt, [2,0,1])
+        sqrt = self.q_sqrt # [R,n,n]
         # Log determinant of matrix S = q_sqrt * q_sqrt^T
         logdet_S = tf.cast(N, float_type)*tf.reduce_sum(
                 tf.log(tf.square(tf.batch_matrix_diag_part(sqrt))))
-        sqrt = tf.tile(sqrt, [1,1,1]) # [R,n,n]
         # noraml random samples, [R,n,N]
         v_samples = tf.random_normal([R,n,N], dtype=float_type)
         # Match dimension of the posterior mean, [R,n,N]
-        mu = tf.tile(tf.expand_dims(tf.transpose(self.q_mu), -1), [1,1,N])
+        mu = tf.tile(tf.expand_dims(self.q_mu, -1), [1,1,N])
         u_samples = mu + tf.batch_matmul(sqrt, v_samples)
         # Stochastic approximation of the Kulback_leibler KL[q(f)||p(f)]
         self._KL = - 0.5 * logdet_S\
              - 0.5 * tf.reduce_sum(tf.square(v_samples)) \
              + 0.5 * tf.reduce_sum(tf.square(u_samples))
         # Cholesky factor of kernel [R,n,n]
-        L = tf.transpose(self.kern.Cholesky(self.X), [2,0,1])
-        # mean, sized [N,n,R]
-        mean = tf.tile(tf.expand_dims(
-                    self.mean_function(self.X),
-                0), [N,1,1])
+        L = self.kern.Cholesky(self.X)
+        # mean, sized [R,n,N]           [R,n]
+        mean = tf.tile(tf.expand_dims(self.mean_function(self.X),-1), [1,1,N])
         # sample from posterior, [N,n,R]
-        f_samples = tf.transpose(
-                    tf.batch_matmul(L, u_samples), # [R,n,N]
-                [2,1,0]) + mean
+        f_samples = tf.batch_matmul(L, u_samples) + mean
         # return as Dict to deal with
         return f_samples
 
@@ -204,7 +202,7 @@ class StVGP(StVmodel):
         Analytically evaluate KL
         """
         if self.q_shape == 'diagonal':
-            KL = kullback_leiblers.gauss_kl_white_diag(self.q_mu, self._q_sqrt)
+            KL = kullback_leiblers.gauss_kl_white_diag(self.q_mu, tf.transpose(self._q_sqrt))
         else:
-            KL = kullback_leiblers.gauss_kl_white(self.q_mu, self.q_sqrt)
+            KL = kullback_leiblers.gauss_kl_white(self.q_mu, tf.transpose(self.q_sqrt, [1,2,0]))
         return KL

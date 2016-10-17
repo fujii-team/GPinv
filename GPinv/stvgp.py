@@ -37,6 +37,7 @@ class StVGP(StVmodel):
     """
     def __init__(self, X, Y, kern, likelihood,
                  mean_function=None, num_latent=None,
+                 num_data = None,
                  q_shape='fullrank',
                  KL_analytic=False,
                  num_samples=20):
@@ -48,7 +49,7 @@ class StVGP(StVmodel):
         KL_analytic: True for the use of the analytical expression for KL.
         num_samples: number of samples to approximate the posterior.
         """
-        self.num_data = X.shape[0] # number of data, n
+        self.num_data = num_data or X.shape[0] # number of data, n
         self.num_latent = num_latent or Y.shape[1] # number of latent function, R
         self.num_samples = num_samples # number of samples to approximate integration, N
         if mean_function is None:
@@ -93,9 +94,9 @@ class StVGP(StVmodel):
         This is necessary because the shape of the parameters depends on the
         shape of the data.
         """
+        '''
         if not self.num_data == self.X.shape[0]:
             raise NotImplementedError
-            '''
             self.num_data = self.X.shape[0]
             self.q_mu = Param(np.zeros((self.num_data, self.num_latent)))
             if self.q_diag:
@@ -105,7 +106,7 @@ class StVGP(StVmodel):
                 q_sqrt = np.array([np.eye(self.num_data)
                                     for _ in range(self.num_latent)]).swapaxes(0, 2)
                 self.q_sqrt = Param(q_sqrt)  # , transforms.LowerTriangular(q_sqrt.shape[2]))  # Temp remove transform                              transforms.positive)
-            '''
+        '''
         return super(StVGP, self)._compile(optimizer=optimizer, **kw)
 
     def build_likelihood(self):

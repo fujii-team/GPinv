@@ -66,12 +66,42 @@ class StVmodel(Model):
             setattr(self, method_name, _build_sample_from_)
             # Overwrite __name__ instance for method_name method
             method = getattr(self, method_name)
-            method.__name__ = method_name            
+            method.__name__ = method_name
         # Then, call this method.
         autoflow = AutoFlow((tf.int32, []))
         autoflow_runnable = autoflow(getattr(self, method_name))
         return autoflow_runnable(self, n_sample)
 
+
+    def _optimize_tf(self, method, callback, maxiter, **kw):
+        """
+        Optimize the model using a tensorflow optimizer. See self.optimize()
+        """
+        opt_step = self._compile(optimizer=method, **kw)
+        feed_dict = self.get_feed_dict()
+        try:
+            iteration = 0
+            while iteration < maxiter:
+                self._session.run(opt_step, feed_dict=feed_dict)
+                if callback is not None:
+                    callback(self._session.run(self._free_vars))
+                iteration += 1
+        except KeyboardInterrupt:
+            print("Caught KeyboardInterrupt, setting model\
+                  with most recent state.")
+            self.set_state(self._session.run(self._free_vars))
+            return None
+
+        final_x = self._session.run(self._free_vars)
+        self.set_state(final_x)
+        fun, jac = self._objective(final_x)
+        r = OptimizeResult(x=final_x,
+                           success=True,
+                           message="Finished iterations.",
+                           fun=fun,
+                           jac=jac,
+                           status="Finished iterations.")
+        return r
 
 # TODO. Our model do not use np.optimize, providing much cleaner codes.
 class HierarchicModel(Model):
